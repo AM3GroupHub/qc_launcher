@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from ase import Atoms, units
 
-from qc_launcher.common.base_calculator import BaseQCCalculator
+from .base_driver import BaseQCCalculator
 
 
 class MLFFCalculator(BaseQCCalculator):

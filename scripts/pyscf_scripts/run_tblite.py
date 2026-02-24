@@ -14,7 +14,7 @@ from ase import Atoms, units
 from sella import Sella, IRC, Constraints
 from sella.optimize.irc import IRCInnerLoopConvergenceFailure
 
-from qc_launcher.common.utils import dump_normal_mode
+from qc_launcher.utils.utils import dump_normal_mode
 
 
 def xTB_numerical_hessian(

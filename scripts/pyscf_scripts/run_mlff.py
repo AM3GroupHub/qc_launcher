@@ -15,7 +15,7 @@ from sella.optimize.irc import IRCInnerLoopConvergenceFailure
 from pyscf import gto, symm
 from pyscf.hessian import thermo
 
-from qc_launcher.common.utils import dump_normal_mode
+from qc_launcher.utils.utils import dump_normal_mode
 
 
 def compute_mlff_hessian(positions: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:

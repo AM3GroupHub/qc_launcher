@@ -9,8 +9,8 @@ from ase.mep import NEB
 from ase.optimize import FIRE
 from ase import units
 
-from qc_launcher.common.utils import build_method, build_3c_method
-from qc_launcher.common.ase_interface import PySCFCalculator
+from qc_launcher.utils.utils import build_method, build_3c_method
+from qc_launcher.utils.ase_interface import PySCFCalculator
 
 
 def main():

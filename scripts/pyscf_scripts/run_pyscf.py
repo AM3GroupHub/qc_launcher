@@ -10,8 +10,8 @@ from pyscf.hessian import thermo
 from ase import Atoms, units
 from sella import Sella, IRC, Constraints
 
-from qc_launcher.common.utils import build_method, build_3c_method, dump_normal_mode, get_gradient_method, get_Hessian_method
-from qc_launcher.common.ase_interface import PySCFCalculator
+from qc_launcher.utils.utils import build_method, build_3c_method, dump_normal_mode, get_gradient_method, get_Hessian_method
+from qc_launcher.utils.ase_interface import PySCFCalculator
 
 
 CACHED_POSITION = None
@@ -231,7 +231,7 @@ def main():
     run_resp: bool = config.get("resp", False)
     if run_resp:
         from gpu4pyscf.pop import esp
-        from qc_launcher.common.topology import get_constraints_idx, rdkit_mol_from_pyscf
+        from qc_launcher.utils.topology import get_constraints_idx, rdkit_mol_from_pyscf
         # stage 1: RESP fitting under weak hyperbolic penalty
         q1 = esp.resp_solve(mf.mol, dm)
         # stage 2: RESP fitting with constraints
@@ -306,7 +306,7 @@ def main():
         numerical = freq_config.get("numerical", False)
         if numerical:
             if with_gpu:
-                from qc_launcher.common import finite_diff_gpu as finite_diff
+                from qc_launcher.utils import finite_diff_gpu as finite_diff
             else:
                 from pyscf.tools import finite_diff
             displacement = float(freq_config.get("displacement", 1e-3))
