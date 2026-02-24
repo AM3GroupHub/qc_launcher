@@ -1,0 +1,457 @@
+import argparse
+import os
+import time
+from types import SimpleNamespace
+
+import numpy as np
+import ase
+import ase.io
+import yaml
+import h5py
+import torch
+from ase import units
+from sella import Sella, IRC, Constraints
+from sella.optimize.irc import IRCInnerLoopConvergenceFailure
+from pyscf import gto, symm
+from pyscf.hessian import thermo
+
+from qc_launcher.common.utils import dump_normal_mode
+
+
+def compute_mlff_hessian(positions: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:
+    """Compute the Hessian matrix using autograd in PyTorch.
+
+    Args:
+        positions (torch.Tensor): Atomic positions with shape (N, 3).
+        forces (torch.Tensor): Forces with shape (N, 3).
+
+    Returns:
+        torch.Tensor: Hessian matrix with shape (3N, 3N).
+    """
+    forces_flat = forces.view(-1)
+    n_hess_elements = forces_flat.shape[0]  # 3N
+
+    def get_vjp(v):
+        return torch.autograd.grad(
+            outputs=-forces_flat,
+            inputs=positions,
+            grad_outputs=v,
+            retain_graph=True,
+            create_graph=False,
+            allow_unused=False,
+        )
+    I_N = torch.eye(n_hess_elements, device=positions.device, dtype=positions.dtype)
+    try:
+        chunk_size = 1 if n_hess_elements < 64 else 16
+        hessian = torch.vmap(get_vjp, in_dims=0, out_dims=0, chunk_size=chunk_size)(I_N)[0]
+    except RuntimeError:
+        hessian = []
+        for grad_elem in forces_flat:
+            hess_row = torch.autograd.grad(
+                outputs=-grad_elem,
+                inputs=positions,
+                grad_outputs=torch.ones_like(grad_elem),
+                retain_graph=True,
+                create_graph=False,
+                allow_unused=False,
+            )[0]
+            hess_row = hess_row.detach()
+            hessian.append(hess_row)
+        hessian = torch.stack(hessian)
+    hessian = hessian.view(n_hess_elements, n_hess_elements)
+    return hessian
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config", type=str, default="config.yaml",
+        help="Path to the configuration file",
+    )
+    args = parser.parse_args()
+
+    with open(args.config, 'r') as f:
+        config: dict = yaml.safe_load(f)
+
+    # setup files
+    inputfile: str = config.get("inputfile", "mol.xyz")
+    filename = inputfile.rsplit('.', 1)[0]
+    datafile: str = config.get("datafile", f"{filename}_data.h5")
+    # empty datafile if save anything
+    for key in config:
+        if isinstance(key, str) and key.startswith("save_") and config[key]:
+            h5py.File(datafile, 'w').close()
+            break
+    
+    # set symmetry tolerance (hardcoded in Angstrom)
+    if "symm_geom_tol" in config:
+        symm.geom.TOLERANCE = config["symm_geom_tol"] / units.Bohr
+
+    # load atoms
+    atoms = ase.io.read(inputfile)
+    charge = config.get("charge", 0)
+    spin = config.get("spin", 0)
+    atoms.info["charge"] = charge
+    atoms.info["spin"] = spin + 1  # Convert PySCF's 2S (args.spin) to ASE's 2S+1 by adding 1
+    
+    mlip: str = config.get("mlip", "mace")
+    device: str = config.get("device", None)
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"No device specified. Using device: {device}")
+    precision: str = config.get("precision", "float64")
+    task_name: str = config.get("task_name", "omol")
+    if mlip.lower() == "mace":
+        from mace.calculators import mace_omol
+        mace_calc = mace_omol(
+            model=config["model"],
+            device=device,
+            default_dtype=precision,
+        )
+        atoms.calc = mace_calc
+        hessian_function = lambda x: mace_calc.get_hessian(x).reshape(len(x) * 3, len(x) * 3)
+    elif mlip.lower() == "orb":
+        from orb_models.forcefield import pretrained
+        from orb_models.forcefield.calculator import ORBCalculator
+        from orb_models.forcefield.atomic_system import ase_atoms_to_atom_graphs
+        orbff = pretrained.orb_v3_conservative_omol(
+            device=device,
+            precision=precision,
+            compile=False,
+        )
+        orb_calc = ORBCalculator(orbff, device=device)
+        atoms.calc = orb_calc
+
+        def orb_hessian_function(atoms):
+            batch = ase_atoms_to_atom_graphs(
+                atoms,
+                system_config=orb_calc.system_config,
+                max_num_neighbors=orb_calc.max_num_neighbors,
+                edge_method=orb_calc.edge_method,
+                half_supercell=orb_calc.half_supercell,
+                device=orb_calc.device,
+            )
+            batch = batch.to(orb_calc.device)
+            positions = batch.node_features["positions"]
+            orbff.training = True
+            forces = orbff(batch)["grad_forces"]
+            hessian = compute_mlff_hessian(positions, forces)
+            orbff.training = False
+            return hessian.cpu().numpy()
+
+        hessian_function = orb_hessian_function
+    elif mlip.lower() == "uma":
+        from fairchem.core import FAIRChemCalculator, pretrained_mlip
+        from fairchem.core.datasets import data_list_collater
+        from omegaconf import OmegaConf
+        model: str = config["model"]
+        atom_refs = OmegaConf.load(os.path.join(model.rsplit('/', 1)[0], "iso_atom_elem_refs.yaml"))
+        predictor = pretrained_mlip.load_predict_unit(model, device=device, atom_refs=atom_refs)
+        # predictor = pretrained_mlip.get_predict_unit(model, device=device, cache_dir="/home/users/nus/zhongpc/scratch/models/uma")
+        uma_calc = FAIRChemCalculator(predictor, task_name=task_name)
+        atoms.calc = uma_calc
+        batch_size = config.get("batch_size", 128)
+        finite_diff_eps = config.get("finite_diff_eps", 5e-3)
+        def uma_hess_function(atoms: ase.Atoms):
+            eps = finite_diff_eps
+            data_list = []
+            for i in range(len(atoms)):
+                for j in range(3):
+                    displaced_plus = atoms.copy()
+                    displaced_minus = atoms.copy()
+                    displaced_plus.positions[i, j] += eps
+                    displaced_minus.positions[i, j] -= eps
+                    data_plus = uma_calc.a2g(displaced_plus)
+                    data_minus = uma_calc.a2g(displaced_minus)
+                    data_list.extend([data_plus, data_minus])
+            # batch and predict
+            forces_list = []
+            for i in range(0, len(data_list), batch_size):
+                if i + batch_size > len(data_list):
+                    data_list_batch = data_list[i:]
+                else:
+                    data_list_batch = data_list[i:i+batch_size]
+                batch = data_list_collater(data_list_batch, otf_graph=True)
+                pred = predictor.predict(batch)
+                batch_forces = pred["forces"].detach()
+                forces_list.append(batch_forces)
+            forces = torch.cat(forces_list, dim=0).reshape(-1, len(atoms), 3)
+            # calculated hessian using finite differences
+            hessian = np.zeros((len(atoms) * 3, len(atoms) * 3))
+            for i in range(len(atoms)):
+                for j in range(3):
+                    idx = i * 3 + j
+                    forces_plus = forces[2 * idx].flatten().cpu().numpy()
+                    forces_minus = forces[2 * idx + 1].flatten().cpu().numpy()
+                    hessian[:, idx] = (forces_minus - forces_plus) / (2 * eps) # forces is the negative graidents
+            return hessian
+
+        hessian_function = uma_hess_function
+    else:
+        raise ValueError(f"Unsupported MLIP model: {mlip}")
+    n_atoms = len(atoms)
+
+    # task 1: optimization
+    run_opt = config.get("opt", False)
+    if run_opt:
+        # record start time
+        start_time = time.time()
+        # parameters for Sella
+        opt_config: dict = config.get("opt_config", {})
+        optts: bool = opt_config.get("ts", False)
+        if optts:
+            eig = opt_config.get("calc_hess", True)
+            order = 1
+        else:
+            eig = opt_config.get("calc_hess", False)
+            order = 0
+        # constraints
+        if "constraints" in opt_config:
+            cons = Constraints(atoms)
+            cons_dict: dict = opt_config["constraints"]
+            if "fix_translation" in cons_dict:
+                for atom_idx in cons_dict["fix_translation"]:
+                    cons.fix_translation(atom_idx)
+                print(f"Applied translation constraints: {cons_dict['fix_translation']}")
+            # bond
+            if "fix_bond" in cons_dict:
+                for bond in cons_dict["fix_bond"]:
+                    cons.fix_bond((bond[0], bond[1]))
+                print(f"Applied bond constraints: {cons_dict['fix_bond']}")
+            # angle
+            if "fix_angle" in cons_dict:
+                for angle in cons_dict["fix_angle"]:
+                    cons.fix_angle((angle[0], angle[1], angle[2]))
+                print(f"Applied angle constraints: {cons_dict['fix_angle']}")
+            # dihedral
+            if "fix_dihedral" in cons_dict:
+                for dihedral in cons_dict["fix_dihedral"]:
+                    cons.fix_dihedral((dihedral[0], dihedral[1], dihedral[2], dihedral[3]))
+                print(f"Applied dihedral constraints: {cons_dict['fix_dihedral']}")
+        else:
+            cons = None
+        sella_opt = Sella(
+            atoms=atoms,
+            trajectory=opt_config.get("trajectory", f"{filename}_opt.traj"),
+            order=order,
+            internal=opt_config.get("internal", True),
+            constraints=cons,
+            constraints_tol=float(opt_config.get("constraints_tol", 1e-5)),
+            delta0=opt_config.get("delta0", None),
+            eta=float(opt_config.get("eta", 1e-4)),
+            gamma=float(opt_config.get("gamma", 0.1)),
+            eig=eig,
+            threepoint=True,
+            nsteps_per_diag=opt_config.get("nsteps_per_diag", 3),
+            diag_every_n=opt_config.get("diag_every_n", None),
+            hessian_function=hessian_function,
+        )
+        energy_criteria = opt_config.get("energy", 1e-6) * units.Hartree
+        fmax_criteria = float(opt_config.get("fmax", 4.5e-4)) * units.Hartree / units.Bohr
+        frms_criteria = float(opt_config.get("frms", 3.0e-4)) * units.Hartree / units.Bohr
+        dmax_criteria = float(opt_config.get("dmax", 1.8e-3))
+        drms_criteria = float(opt_config.get("drms", 1.2e-3))
+        max_steps: int = opt_config.get("max_steps", 1000)
+        last_pos = atoms.get_positions().copy()
+        last_energy = np.inf
+        for i in sella_opt.irun(fmax=0, steps=max_steps):
+            delta_pos = np.linalg.norm(atoms.get_positions() - last_pos, axis=1)
+            delta_energy = abs(atoms.get_potential_energy() - last_energy)
+            fmax = np.max(np.abs(atoms.get_forces()))
+            frms = np.sqrt(np.mean(atoms.get_forces()**2))
+            dmax = np.max(delta_pos)
+            drms = np.sqrt(np.mean(delta_pos**2))
+            if (delta_energy < energy_criteria and
+                fmax < fmax_criteria and
+                frms < frms_criteria and
+                dmax < dmax_criteria and
+                drms < drms_criteria):
+                print("Optimization converged based on given criteria.")
+                break
+            last_pos = atoms.get_positions().copy()
+            last_energy = atoms.get_potential_energy()
+        else:
+            Warning("Optimization did not converge within the maximum number of steps.")
+            print(f"Final Energy Change   : {delta_energy:.6e} Eh")
+            print(f"Final MAX force       : {fmax * units.Bohr / units.Hartree:.6e} Eh/Bohr")
+            print(f"Final RMS force       : {frms * units.Bohr / units.Hartree:.6e} Eh/Bohr")
+            print(f"Final MAX displacement: {dmax:.6e} Angstrom")
+            print(f"Final RMS displacement: {drms:.6e} Angstrom")
+        # save final structure
+        opt_outputfile = opt_config.get("outputfile", f"{filename}_opt.xyz")
+        ase.io.write(opt_outputfile, atoms, columns=["symbols", "positions"])
+        # record end time
+        end_time = time.time()
+        print(f"Optimization completed in {end_time - start_time:.2f} seconds.")
+
+    # task 2: single point energy
+    start_time = time.time()
+    energy = atoms.get_potential_energy()
+    end_time = time.time()
+    print(f"Energy prediction completed in {end_time - start_time:.2f} seconds.")
+    print(f"MLFF energy  [eV]: {energy:16.10f}")
+    print(f"MLFF energy  [Eh]: {energy / units.Hartree:16.10f}")
+
+    # task 3: forces (gradients)
+    run_forces: bool = config.get("forces", False)
+    if run_forces:
+        start_time = time.time()
+        forces = atoms.get_forces()
+        end_time = time.time()
+        print(f"Forces prediction completed in {end_time - start_time:.2f} seconds.")
+        print("MLFF forces [eV/Ang]:")
+        elements = atoms.get_chemical_symbols()
+        for i, (ele, force) in enumerate(zip(elements, forces)):
+            print(f"{i+1:3d} {ele:2s} {force[0]:12.6f} {force[1]:12.6f} {force[2]:12.6f}")
+        save_forces: bool = config.get("save_forces", False)
+        if save_forces:
+            with h5py.File(datafile, 'a') as h5f:
+                h5f.create_dataset("forces", data=forces)
+                h5f.create_dataset("forces_unit", data="eV/Ang")
+
+    # task 4: vibrational frequency analysis
+    run_freq: bool = config.get("freq", False)
+    if run_freq:
+        start_time = time.time()
+        hessian = hessian_function(atoms)
+        end_time = time.time()
+        print(f"Hessian prediction completed in {end_time - start_time:.2f} seconds.")
+        save_hess: bool = config.get("save_hess", False)
+        if save_hess:
+            with h5py.File(datafile, 'a') as h5f:
+                h5f.create_dataset("hessian", data=hessian)
+                h5f.create_dataset("hessian_unit", data="eV/Ang^2")
+        
+        # convert hessian to Hartree/Bohr^2
+        _hessian = hessian.reshape(n_atoms, 3, n_atoms, 3).transpose(0, 2, 1, 3)
+        _hessian *= (units.Bohr**2 / units.Hartree)  # Convert from eV/Ang^2 to Hartree/Bohr^2
+
+        # create a temporary Mole()
+        start_time = time.time()
+        mol = gto.M(
+            atom=[(ele, coord) for ele, coord in zip(atoms.get_chemical_symbols(), atoms.get_positions())],
+            charge=charge,
+            spin=spin,
+        )
+        freq_info = thermo.harmonic_analysis(mol, _hessian, imaginary_freq=False)
+        # imaginary frequencies
+        freq_au = freq_info["freq_au"]
+        num_imag = np.sum(freq_au < 0)
+        if num_imag > 0:
+            print(f"Note: {num_imag} imaginary frequencies detected!")
+        dummy_mf = SimpleNamespace(mol=mol, e_tot=energy / units.Hartree)
+        temp = config.get("temp", 298.15)
+        press = config.get("press", 101325)
+        thermo_info = thermo.thermo(dummy_mf, freq_au, temp, press)
+        end_time = time.time()
+        print(f"Vibrational frequency analysis completed in {end_time - start_time:.2f} seconds.")
+        # log thermo info
+        dump_normal_mode(mol, freq_info)
+        thermo.dump_thermo(mol, thermo_info)
+        # save frequencies and normal modes
+        save_freq: bool = config.get("save_freq", False)
+        if save_freq:
+            with h5py.File(datafile, 'a') as h5f:
+                h5f.create_dataset("freq_wavenumber", data=freq_info["freq_wavenumber"])
+                h5f.create_dataset("freq_wavenumber_unit", data="cm^-1")
+                h5f.create_dataset("norm_mode", data=freq_info["norm_mode"])
+        # save thermo data
+        save_thermo: bool = config.get("save_thermo", False)
+        if save_thermo:
+            pyscf_names = ["temperature", "pressure", "E0", "ZPE", "E_tot", "H_tot", "S_tot", "G_tot"]
+            reactml_names = ["T", "P", "E0", "ZPE", "U", "H", "S", "G"]
+            with h5py.File(datafile, 'a') as h5f:
+                for pyscf_name, reactml_name in zip(pyscf_names, reactml_names):
+                    h5f.create_dataset(reactml_name, data=thermo_info[pyscf_name][0])
+                    h5f.create_dataset(f"{reactml_name}_unit", data=thermo_info[pyscf_name][1])
+
+    # task 5: IRC
+    run_irc: bool = config.get("irc", False)
+    irc_trajectory: str = config.get("irc_trajectory", f"{filename}_irc.traj")
+    if run_irc:
+        start_time = time.time()
+        irc_config: dict = config.get("irc_config", {})
+        sella_irc = IRC(
+            atoms=atoms,
+            trajectory=irc_trajectory,
+            ninner_iter=irc_config.get("ninner_iter", 10),
+            dx=float(irc_config.get("dx", 0.1)),
+            eta=float(irc_config.get("eta", 1e-4)),
+            peskwargs={"threepoint": True},
+            keep_going=irc_config.get("keep_going", False),
+            diag_every_n=irc_config.get("diag_every_n", None),
+            hessian_function=hessian_function,
+        )
+        fmax: float = irc_config.get("fmax", 4.5e-4) * units.Hartree / units.Bohr
+        max_steps = irc_config.get("max_steps", 100)
+        direction: str = irc_config.get("direction", "both")
+        assert direction in ["forward", "reverse", "both"], "Invalid IRC direction. Choose from 'forward', 'reverse', or 'both'."
+
+        # forward direction
+        # record the initial position
+        pos_init = atoms.get_positions().copy()
+        if direction in ["forward", "both"]:
+            print("Starting forward IRC")
+            irc_converged = sella_irc.run(fmax=fmax, steps=max_steps, direction="forward")
+            if not irc_converged:
+                Warning("Forward IRC did not converge within the maximum number of steps.")
+            ase.io.write(f"{filename}_irc_forward.xyz", sella_irc.atoms, format="xyz")
+        
+        # reverse direction
+        if direction in ["reverse", "both"]:
+            print("Starting reverse IRC")
+            try:
+                irc_converged = sella_irc.run(fmax=fmax, steps=irc_steps, direction="reverse")
+            except IRCInnerLoopConvergenceFailure as e:
+                Warning("IRC inner loop failed to converge: " + str(e))
+                irc_converged = False
+            finally:
+                print(f"IRC completed. Converged: {irc_converged}")
+                ase.io.write(f"{filename}_irc_reverse.xyz", sella_irc.atoms, format="xyz")
+            atoms_traj = ase.io.Trajectory(irc_trajectory, mode="r")
+            reverse_steps = sella_irc.nsteps
+        else:
+            reverse_steps = 0
+        
+        # forward direction
+        if direction in ["forward", "both"]:
+            print("Starting forward IRC")
+            # reset to initial position
+            sella_irc.v0ts = None
+            atoms.set_positions(pos_init)
+            # reset trajectory
+            try:
+                irc_converged = sella_irc.run(fmax=fmax, steps=irc_steps, direction="forward")
+            except IRCInnerLoopConvergenceFailure as e:
+                Warning("IRC inner loop failed to converge: " + str(e))
+                irc_converged = False
+            finally:
+                print(f"IRC completed. Converged: {irc_converged}")
+                ase.io.write(f"{filename}_irc_forward.xyz", sella_irc.atoms, format="xyz")
+            atoms_traj = ase.io.Trajectory(irc_trajectory, mode="r")
+            print(len(atoms_traj), "frames saved in", irc_trajectory)
+            print(sella_irc.nsteps, "IRC steps taken.")
+            forward_steps = sella_irc.nsteps
+        else:
+            forward_steps = 0
+        end_time = time.time()
+        print(f"IRC calculation completed in {end_time - start_time:.2f} seconds.")
+        
+        save_traj_xyz: bool = irc_config.get("save_traj_xyz", False)
+        if save_traj_xyz:
+            atoms_traj = ase.io.Trajectory(irc_trajectory, mode="r")
+            atoms_traj = list(atoms_traj)
+            atoms_ts = atoms_traj[0]
+            atoms_ts.info["note"] = "TS"
+            # reverse the reverse IRC steps to maintain chronological order
+            atoms_list = atoms_traj[1:reverse_steps+1][::-1]
+            # append the TS structure
+            atoms_list.append(atoms_ts)
+            # append the forward IRC steps
+            atoms_list.extend(atoms_traj[reverse_steps+1:reverse_steps+1+forward_steps])
+            ase.io.write(f"{filename}_irc.xyz", atoms_list)
+            print(f"Full IRC path saved to {filename}_irc.xyz")
+
+
+if __name__ == "__main__":
+    main()

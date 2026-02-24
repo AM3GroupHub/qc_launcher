@@ -1,0 +1,11 @@
+# Ignore all .log files
+*cpython*
+*.log
+*.pyc
+**/data/
+**/__pycache__/
+**.egg-info/
+.vscode/
+.venv/
+uv.lock
+exptl/
