@@ -1,7 +1,8 @@
 import os
 import sys
 from types import MethodType
-from typing import Dict, Any, Optional
+from typing import Optional, Literal
+
 import numpy as np
 from pyscf import gto, lib, dft
 from pyscf.lib import GradScanner
@@ -23,11 +24,16 @@ class PySCFCalculator(Calculator):
     implemented_properties = ["energy", "forces"]
     default_parameters = {}
     def __init__(
-        self, method, g_scanner, max_unconverged_steps=None, soscf=False, **kwargs
+        self,
+        method,
+        g_scanner,
+        max_unconverged_steps: int = None,
+        retry_soscf=False,
+        **kwargs,
     ):
         self.method = method
         self.g_scanner: GradScanner = g_scanner
-        self.soscf = soscf
+        self.retry_soscf = retry_soscf
         self.max_unconverged_steps = sys.maxsize if max_unconverged_steps is None else max_unconverged_steps
         self.num_unconverged = 0
         Calculator.__init__(self, **kwargs)
@@ -64,7 +70,7 @@ class PySCFCalculator(Calculator):
         mol.set_geom_(_atoms, unit="Angstrom")
         
         energy, gradients = self.g_scanner(mol)
-        if not self.g_scanner.converged and self.soscf:
+        if not self.g_scanner.converged and self.retry_soscf:
             # try SOSCF if not converged
             newton_method = self.method.newton()
             newton_method.reset(mol)
@@ -85,19 +91,21 @@ class PySCFCalculator(Calculator):
         self.results["forces"] = -gradients * (Hartree / Bohr)
 
 
-class DFTDriver(BaseDriver):
+class PySCFDriver(BaseDriver):
     def __init__(
         self,
         atoms: Atoms,
-        config: Optional[Dict[str, Any]] = None,
+        config: dict,
     ):
         super().__init__(atoms=atoms, config=config)
         self.is_3c = self.config.get("xc", "B3LYP").endswith("3c")
         self.method = self.build_method()
         self.gradient_method = None
         self.hessian_method = None
+        self._dm_cache = None  # cache for density matrix
+        self.retry_soscf = self.config.get("retry_soscf", False)
     
-    def _build_mf(self, atoms: Optional[Atoms] = None, config: Optional[Dict[str, Any]] = None) -> Any:
+    def _build_mf(self, atoms: Optional[Atoms] = None, config: Optional[dict] = None):
         """
         Build PySCF method from configuration or atoms.
         
@@ -107,12 +115,8 @@ class DFTDriver(BaseDriver):
         Returns:
             PySCF SCF method object.
         """
-        if atoms is None:
-            atoms = self.atoms
-        else:
-            self.atoms = atoms
-        if config is None:
-            config = self.config
+        self.update_atoms(atoms)
+        config = self.config if config is None else config
         xc = config.get("xc", "B3LYP")
         basis = config.get("basis", "def2-svp")
         ecp = config.get("ecp", None)
@@ -139,9 +143,9 @@ class DFTDriver(BaseDriver):
         threads = config.get("threads", os.environ.get("OMP_NUM_THREADS", os.cpu_count()))
         lib.num_threads(threads)
 
-        atom = [(symbol, pos) for symbol, pos in zip(atoms.get_chemical_symbols(), atoms.get_positions())]
-        charge = atoms.info.get("charge", 0)
-        spin = atoms.info.get("multiplicity", 1) - 1
+        atom = [(symbol, pos) for symbol, pos in zip(self.atoms.get_chemical_symbols(), self.atoms.get_positions())]
+        charge = self.atoms.info.get("charge", 0)
+        spin = self.atoms.info.get("multiplicity", 1) - 1
 
         # build molecule
         mol = gto.M(
@@ -268,6 +272,32 @@ class DFTDriver(BaseDriver):
         h.grids_response = True
         return h
 
+    def clear_cache(self):
+        self._dm_cache = None
+        return super().clear_cache()
+
+    def run_kernel(self, atoms: Optional[Atoms] = None, use_cache: bool = True) -> float:
+        self.update_atoms(atoms)
+        self.method.mol.set_geom_(self.atoms.get_positions(), unit="Angstrom")
+        dm0 = self._dm_cache if use_cache else None
+        energy = self.method.kernel(dm0=dm0)
+        converged = self.method.converged
+        if not converged and self.retry_soscf:
+            # try SOSCF if not converged
+            mo_init = self.method.mo_coeff
+            mocc_init = self.method.mo_occ
+            newton_method = self.method.newton()
+            energy = newton_method.kernel(mo_init, mocc_init)
+            converged = newton_method.converged
+            if converged:
+                print("SOSCF converged")
+                self.method.mo_coeff = newton_method.mo_coeff
+                self.method.mo_occ = newton_method.mo_occ
+
+        if use_cache:
+            self._dm_cache = self.method.make_rdm1()
+        return energy * Hartree
+
     def to_ase_calc(self):
         if self.gradient_method is None:
             self.gradient_method = self.build_gradient_method()
@@ -275,28 +305,21 @@ class DFTDriver(BaseDriver):
         return PySCFCalculator(
             method=self.method, g_scanner=g_scanner,
             max_unconverged_steps=self.config.get("max_unconverged_steps", None),
+            retry_soscf=self.retry_soscf,
         )
 
-    def _compute_hessian_impl(self, atoms: Atoms) -> np.ndarray:
-        """
-        Compute Hessian matrix using PySCF.
-        
-        Args:
-            atoms: ASE Atoms object.
-            
-        Returns:
-            Hessian matrix in eV/Angstrom^2 with shape (3N, 3N).
-        """
-        # Update geometry
-        self.method.mol.set_geom_(atoms.get_positions(), unit="Angstrom")
-        self.method.run()
+    def _compute_hessian_impl(
+        self,
+        atoms: Optional[Atoms],
+        hess_format: Literal["pyscf", "ase"] = "ase",
+    ) -> np.ndarray:
+        # run energy
+        self.run_kernel(atoms=atoms, use_cache=True)
         
         # Compute Hessian
         if self.hessian_method is None:
             self.hessian_method = self.build_hessian_method()
-        natom = self.method.mol.natm
         hessian = self.hessian_method.kernel()
-        hessian = hessian.transpose(0, 2, 1, 3).reshape(3*natom, 3*natom)
-        hessian *= Hartree / (Bohr ** 2)  # convert to eV/Angstrom^2
+        hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
         return hessian
     

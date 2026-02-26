@@ -8,11 +8,21 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "ase>=3.26.0",
+    "ase",
+    "pyyaml",
+    "pyscf<=2.10.0",
+]
+[project.optional-dependencies]
+gpu4pyscf = [
     "cupy-cuda12x==13.4.1",
     "cutensor-cu12==2.2.0",
-    "gpu4pyscf-cuda12x>=1.4.3",
-    "pyyaml>=6.0.3",
+    "gpu4pyscf-cuda12x",
+]
+mace = [
+    "mace-torch"
+]
+fairchem = [
+    "fairchem-core"
 ]
 [tool.setuptools]
 packages = { find = { where = ["src"] } }
