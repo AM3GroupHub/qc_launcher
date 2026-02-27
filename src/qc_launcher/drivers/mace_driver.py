@@ -1,11 +1,13 @@
-import os
 from typing import Optional, Literal
+from types import SimpleNamespace
 
 import numpy as np
 import torch
 from ase import Atoms
+from ase.units import Hartree
 from mace.calculators import mace_omol, mace_mp
 from mace.calculators import MACECalculator
+from pyscf import gto
 
 from .base_driver import BaseDriver
 
@@ -44,6 +46,25 @@ class MACEDriver(BaseDriver):
         if self.calc is None:
             self.calc = self.build_calc()
         return self.calc
+
+    def to_pyscf_mf(self):
+        mol = gto.M(
+            atom=[(symb, coord) for symb, coord in zip(self.atoms.get_chemical_symbols(), self.atoms.get_positions())],
+            charge=self.atoms.info.get("charge", 0),
+            spin=self.atoms.info.get("multiplicity", 1) - 1,
+        )
+        if self.calc is None:
+            self.calc = self.build_calc()
+        e_tot = self.calc.get_potential_energy(self.atoms) / Hartree  # convert from eV to Hartree
+        dummy_mf = SimpleNamespace(mol=mol, e_tot=e_tot)
+        return dummy_mf
+
+    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+        if self.calc is None:
+            self.calc = self.build_calc()
+        self.update_atoms(atoms)
+        energy = self.calc.get_potential_energy(self.atoms)
+        return energy
 
     def _compute_hessian_impl(
         self,

@@ -21,7 +21,7 @@ class BaseDriver(ABC):
         self.config = config
         self._hessian_cache = {}
             
-    def update_atoms(self, atoms: Atoms) -> None:
+    def update_atoms(self, atoms: Optional[Atoms]) -> bool:
         """
         Update the internal state with new atomic positions.
         
@@ -29,7 +29,12 @@ class BaseDriver(ABC):
         
         Args:
             atoms: ASE Atoms object with updated positions.
+        Returns:
+            True if positions were updated, else False if positions are the same and no update was needed.
         """
+        # if atoms is None, nothing to update
+        if atoms is None:
+            return False
         # check if atomic numbers have changed
         new_numbers = atoms.get_atomic_numbers()
         curr_numbers = self.atoms.get_atomic_numbers()
@@ -43,7 +48,12 @@ class BaseDriver(ABC):
         curr_multiplicity = self.atoms.info.get("multiplicity", 1)
         if new_multiplicity != curr_multiplicity:
             raise ValueError("Multiplicity cannot be changed. Please create a new driver instance.")
+        new_pos = atoms.get_positions()
+        curr_pos = self.atoms.get_positions()
+        if np.allclose(new_pos, curr_pos, atol=1e-5):
+            return False  # positions are the same, no update needed
         self.atoms = atoms
+        return True
 
     @abstractmethod
     def to_ase_calc(self) -> Calculator:
@@ -57,6 +67,31 @@ class BaseDriver(ABC):
         """
         pass
 
+    @abstractmethod
+    def to_pyscf_mf(self):
+        """
+        Convert the internal method/model to a PySCF SCF object if possible.
+        
+        This is software-specific and must be implemented by each subclass.
+        
+        Returns:
+            A PySCF SCF object if conversion is possible, otherwise None.
+        """
+        pass
+
+    @abstractmethod
+    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+        """
+        Compute the potential energy of the system.
+        
+        This is software-specific and must be implemented by each subclass.
+        
+        Args:
+            atoms: ASE Atoms object. If None, use the internal Atoms object.
+        Returns:
+            Potential energy in eV.
+        """
+        pass
 
     @abstractmethod
     def _compute_hessian_impl(

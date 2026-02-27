@@ -277,8 +277,17 @@ class PySCFDriver(BaseDriver):
         return super().clear_cache()
 
     def run_kernel(self, atoms: Optional[Atoms] = None, use_cache: bool = True) -> float:
-        self.update_atoms(atoms)
+        """
+        run PySCF kernel to compute energy, with optional caching of density matrix for faster convergence in subsequent calls.
+        """
+        updated = self.update_atoms(atoms)
+        if not updated and self.method.converged:
+            # positions are the same and SCF already converged, no need to rerun
+            return self.method.e_tot * Hartree  # convert from Hartree to eV
+        
+        # update molecule geometry
         self.method.mol.set_geom_(self.atoms.get_positions(), unit="Angstrom")
+        # if use_cache, pass cached density matrix to speed up convergence
         dm0 = self._dm_cache if use_cache else None
         energy = self.method.kernel(dm0=dm0)
         converged = self.method.converged
@@ -293,10 +302,10 @@ class PySCFDriver(BaseDriver):
                 print("SOSCF converged")
                 self.method.mo_coeff = newton_method.mo_coeff
                 self.method.mo_occ = newton_method.mo_occ
-
-        if use_cache:
+        if use_cache:  # save new density matrix to cache
             self._dm_cache = self.method.make_rdm1()
-        return energy * Hartree
+        
+        return energy * Hartree  # convert from Hartree to eV
 
     def to_ase_calc(self):
         if self.gradient_method is None:
@@ -308,18 +317,101 @@ class PySCFDriver(BaseDriver):
             retry_soscf=self.retry_soscf,
         )
 
+    def to_pyscf_mf(self):
+        if self.method is None:
+            self.method = self.build_method()
+        if not self.method.converged:
+            self.run_kernel(use_cache=False)  # run SCF to ensure method is converged before returning
+        return self.method
+
+    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+        e_tot_eV = self.run_kernel(atoms=atoms, use_cache=True)
+        e_tot = self.method.e_tot  # in Hartree
+        scf_summary = self.method.scf_summary
+        e1 = scf_summary.get("e1", 0.0)        # one-electron energy
+        e_coul = scf_summary.get("coul", 0.0)  # Coulomb energy
+        e_xc = scf_summary.get("exc", 0.0)     # exchange-correlation energy
+        e_disp = scf_summary.get("disp", 0.0)  # dispersion energy
+        e_solvent = scf_summary.get("solvent", 0.0)  # solvent energy
+        # log results
+        print(f"Total Energy        [Eh]: {e_tot:16.10f}")
+        print(f"One-electron Energy [Eh]: {e1:16.10f}")
+        print(f"Coulomb Energy      [Eh]: {e_coul:16.10f}")
+        print(f"XC Energy           [Eh]: {e_xc:16.10f}")
+        if abs(e_disp) > 1e-10:
+            print(f"Dispersion Energy   [Eh]: {e_disp:16.10f}")
+        if abs(e_solvent) > 1e-10:
+            print(f"Solvent Energy      [Eh]: {e_solvent:16.10f}")
+        dm = self.method.make_rdm1()
+        if not isinstance(dm, np.ndarray):
+            dm = dm.get()  # convert cupy array to numpy array if needed
+        mo_energy = self.method.mo_energy
+        if not isinstance(mo_energy, np.ndarray):
+            mo_energy = mo_energy.get()  # convert cupy array to numpy array if needed
+        if dm.ndim == 3:  # open-shell
+            mo_energy[0].sort()
+            mo_energy[1].sort()
+            na, nb = self.method.nelec
+            print(f"LUMO Alpha [Eh]: {mo_energy[0][na]:12.6f}")
+            print(f"LUMO Beta  [Eh]: {mo_energy[1][nb]:12.6f}")
+            print(f"HOMO Alpha [Eh]: {mo_energy[0][na-1]:12.6f}")
+            print(f"HOMO Beta  [Eh]: {mo_energy[1][nb-1]:12.6f}")
+        else:  # closed-shell
+            mo_energy.sort()
+            nocc = self.method.mol.nelectron // 2
+            print(f"LUMO [Eh]: {mo_energy[nocc]:12.6f}")
+            print(f"HOMO [Eh]: {mo_energy[nocc-1]:12.6f}")
+        return e_tot_eV
+
+    def compute_resp(self, atoms: Optional[Atoms] = None) -> np.ndarray:
+        from gpu4pyscf.pop import esp
+        from qc_launcher.utils.topology import get_constraints_idx, rdkit_mol_from_pyscf
+        self.run_kernel(atoms=atoms, use_cache=True)
+        dm = self.method.make_rdm1()
+        # stage 1: RESP fitting under weak hyperbolic penalty
+        q1 = esp.resp_solve(self.method.mol, dm)
+        # stage 2: RESP fitting with constraints
+        rdkit_mol = rdkit_mol_from_pyscf(self.method.mol)
+        sum_constraints_idx, equal_constraints = get_constraints_idx(rdkit_mol)
+        sum_constraints = []
+        for i in sum_constraints_idx:
+            sum_constraints.append([q1[i], [i]])
+        q2 = esp.resp_solve(
+            self.method.mol, dm,
+            resp_a=1e-3,
+            sum_constraints=sum_constraints,
+            equal_constraints=equal_constraints,
+        )
+        # print RESP charges
+        print("RESP charges [e]:")
+        for i, charge in enumerate(q2):
+            print(f"{i+1:3d} {charge:16.10f}")
+        return q2
+
     def _compute_hessian_impl(
         self,
         atoms: Optional[Atoms],
         hess_format: Literal["pyscf", "ase"] = "ase",
     ) -> np.ndarray:
-        # run energy
-        self.run_kernel(atoms=atoms, use_cache=True)
+        numerical_hess = self.config.get("numerical_hess", False)
+        if numerical_hess:
+            with_gpu = self.config.get("with_gpu", True)
+            if with_gpu:
+                from qc_launcher.utils import finite_diff_gpu as finite_diff
+            else:
+                from pyscf.tools import finite_diff
+            finite_diff_eps = self.config.get("finite_diff_eps", 5e-3)
+            if self.gradient_method is None:
+                self.gradient_method = self.build_gradient_method()
+            finite_diff_h = finite_diff.Hessian(self.gradient_method)
+            finite_diff_h.displacement = finite_diff_eps / Bohr  # convert from Angstrom to Bohr
+            hessian = finite_diff_h.kernel()
+        else:
+            self.run_kernel(atoms=atoms, use_cache=True)
+            if self.hessian_method is None:
+                self.hessian_method = self.build_hessian_method()
+            hessian = self.hessian_method.kernel()
         
-        # Compute Hessian
-        if self.hessian_method is None:
-            self.hessian_method = self.build_hessian_method()
-        hessian = self.hessian_method.kernel()
         hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
         return hessian
     

@@ -1,4 +1,5 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
+from types import SimpleNamespace
 
 import numpy as np
 from ase import Atoms
@@ -7,8 +8,9 @@ from ase.units import Hartree, Bohr, kB
 from tblite.interface import Calculator, Result
 from tblite.ase import TBLite, _create_api_calculator
 from tblite.exceptions import TBLiteRuntimeError
+from pyscf import gto
 
-from qc_launcher.drivers.base_driver import BaseDriver
+from .base_driver import BaseDriver
 
 
 def heating_annealing(
@@ -18,6 +20,44 @@ def heating_annealing(
     heating_step: float = 300.0,
     annealing_step: float = 50.0,
 ) -> Optional[Result]:
+    """
+    Resolves xTB convergence issues using an electronic annealing strategy.
+
+    Physical Context:
+    For systems with small HOMO-LUMO gaps or strong electronic correlation, SCF 
+    iterations often oscillate. Increasing the electronic temperature (Fermi smearing) 
+    broadens the orbital occupancy, which smoothens the energy landscape and aids 
+    convergence. This function recovers the target state by first finding a high-temperature 
+    converged state and then gradually "cooling" the system using the previous 
+    wavefunction as an initial guess (restart).
+
+    Algorithm Logic:
+    1. Linear Escalation (Heating Phase):
+       The algorithm searches upwards from the target temperature using `heating_step` 
+       until the first converged state is found at `temp_high`. If `max_temp` is 
+       reached without success, the process terminates.
+
+    2. Adaptive Bisection Descent (Annealing Phase):
+       Using `temp_high` as a "safe anchor," the algorithm attempts to lower the 
+       temperature toward the target. 
+       - On Success: The anchor `temp_high` is updated to the current temperature, 
+         and the search continues further down.
+       - On Failure: The algorithm backtracks to the midpoint between the current 
+         failed temperature and the last successful anchor (`temp_high`).
+       - Convergence: The loop terminates successfully if the target temperature 
+         is reached, or fails if the bisection gap becomes smaller than `annealing_step`.
+
+    Args:
+        xtb: A Calculator object supporting `singlepoint()` and `set()` methods.
+        temp: The target physical temperature in Kelvin.
+        max_temp: Maximum allowed electronic temperature in Kelvin.
+        heating_step: Incremental step size for the initial upward scan.
+        annealing_step: Minimum temperature resolution for the bisection search.
+
+    Returns:
+        Optional[Result]: The converged Result object at the lowest reachable 
+        temperature (ideally `temp`), or None if no convergence was found.
+    """
     kB_Hartree = kB / Hartree
     # escalate temperature until convergence or max_temp is reached
     temp_high = None
@@ -260,6 +300,19 @@ class TBLiteDriver(BaseDriver):
             self.calc = self.build_calc()
         return self.calc
 
+    def to_pyscf_mf(self):
+        mol = gto.M(
+            atom=[(symb, coord) for symb, coord in zip(self.atoms.get_chemical_symbols(), self.atoms.get_positions())],
+            charge=self.atoms.info.get("charge", 0),
+            spin=self.atoms.info.get("multiplicity", 1) - 1,
+        )
+        if self.xtb is None:
+            self.xtb = self.build_xtb()
+        res = self.run_kernel(use_cache=True)
+        e_tot = res["energy"] if res is not None else None
+        dummy_mf = SimpleNamespace(mol=mol, e_tot=e_tot)
+        return dummy_mf
+
     def run_kernel(
         self, atoms: Optional[Atoms] = None, use_cache: bool = True) -> Result:
         self.update_atoms(atoms)
@@ -293,18 +346,32 @@ class TBLiteDriver(BaseDriver):
             self._res_cache = res
         return res
         
+    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+        res = self.run_kernel(atoms)
+        if res is None:
+            print("Failed to converge")
+            return None
+        return res["energy"] * Hartree  # convert from Hartree to eV
 
-
-if __name__ == "__main__":
-    calc = Calculator(
-        method="GFN2-xTB",
-        numbers=np.array([24, 24]),
-        positions=np.array([[0, 0, 0], [0, 0, 2.4]]) / Bohr,
-        charge=0,
-        uhf=0,
-    )
-    # calc.set("max-iter", 30)
-    # res = heating_annealing(calc, temp=300.0, max_temp=2000.0, heating_step=300.0, annealing_step=50.0)
-    res = calc.singlepoint()
-    res = calc.singlepoint(res=res)
-    print(res)
+    def _compute_hessian_impl(
+        self,
+        atoms: Optional[Atoms],
+        hess_format: Literal["pyscf", "ase"] = "ase",
+    ) -> np.ndarray:
+        self.update_atoms(atoms)
+        natm = len(self.atoms)
+        hessian = np.zeros((natm, natm, 3, 3))  # pyscf format
+        eps = self.config.get("finite_diff_eps", 5e-3)
+        atoms_copy = self.atoms.copy()
+        for i in range(natm):
+            for j in range(3):
+                atoms_copy.positions[i, j] += eps
+                res_plus = self.run_kernel(atoms_copy, use_cache=True)
+                grad_plus = res_plus["gradient"]
+                atoms_copy.positions[i, j] -= 2 * eps
+                res_minus = self.run_kernel(atoms_copy, use_cache=True)
+                grad_minus = res_minus["gradient"]
+                hessian[i, :, j, :] = (grad_plus - grad_minus) / (2 * eps)
+                atoms_copy.positions[i, j] += eps
+        hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
+        return hessian
