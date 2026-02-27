@@ -10,7 +10,7 @@ from qc_launcher.drivers import BaseDriver
 def run_irc(
     driver: BaseDriver,
     config: dict,
-    input_name: str = "molecule",
+    filename: str = "molecule",
 ) -> None:
     # record the start time
     start_time = time.time()
@@ -18,7 +18,7 @@ def run_irc(
     atoms = driver.atoms
 
     # get config
-    irc_trajectory = config.get("irc_trajectory", f"{input_name}_irc.traj")
+    irc_trajectory = config.get("irc_trajectory", f"{filename}_irc.traj")
     ninner_iter = config.get("ninner_iter", 10)
     dx = float(config.get("dx", 0.1))  # step size in Angstrom
     eta = float(config.get("eta", 1e-4))
@@ -51,7 +51,7 @@ def run_irc(
         converged = irc.run(fmax=fmax_criterion, steps=steps, direction="forward")
         if not converged:
             Warning("Forward IRC did not converge within the maximum number of steps.")
-        ase.io.write(f"{input_name}_forward.xyz", irc.atoms, columns=["symbols", "positions"])
+        ase.io.write(f"{filename}_forward.xyz", irc.atoms, columns=["symbols", "positions"])
 
     # reverse direction
     if direction in {"reverse", "both"}:
@@ -62,7 +62,7 @@ def run_irc(
         converged = irc.run(fmax=fmax_criterion, steps=steps, direction="reverse")
         if not converged:
             Warning("Reverse IRC did not converge within the maximum number of steps.")
-        ase.io.write(f"{input_name}_reverse.xyz", irc.atoms, columns=["symbols", "positions"])
+        ase.io.write(f"{filename}_reverse.xyz", irc.atoms, columns=["symbols", "positions"])
     
     end_time = time.time()
     print(f"IRC completed in {end_time - start_time:.2f} seconds.")

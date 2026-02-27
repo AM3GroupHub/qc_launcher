@@ -351,7 +351,11 @@ class TBLiteDriver(BaseDriver):
         if res is None:
             print("Failed to converge")
             return None
-        return res["energy"] * Hartree  # convert from Hartree to eV
+        e_tot = res["energy"]  # in Hartree
+        e_tot_eV = e_tot * Hartree  # convert from Hartree to eV
+        print(f"Total Energy        [eV]: {e_tot_eV:16.10f}")
+        print(f"Total Energy        [Eh]: {e_tot:16.10f}")
+        return e_tot_eV  # return energy in eV
 
     def _compute_hessian_impl(
         self,

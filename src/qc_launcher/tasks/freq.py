@@ -2,9 +2,7 @@ import time
 
 import h5py
 import numpy as np
-import ase.io
-from ase import Atoms
-from ase.units import Hartree, Bohr
+from ase.units import Bohr
 
 from qc_launcher.drivers import BaseDriver
 
@@ -17,7 +15,7 @@ from qc_launcher.utils.utils import dump_normal_mode
 def run_freq(
     driver: BaseDriver,
     config: dict,
-    input_name: str = "molecule",
+    filename: str = "molecule",
 ) -> None:
     if "symm_geom_tol" in config:
         symm.geom.TOLERANCE = config["symm_geom_tol"] / Bohr  # convert from Angstrom to Bohr
@@ -30,7 +28,7 @@ def run_freq(
     end_time = time.time()
     print(f"Hessian computation completed in {end_time - start_time:.2f} seconds.")
 
-    datafile = config.get("datafile", f"{input_name}_data.h5")
+    datafile = config.get("datafile", f"{filename}_data.h5")
     save_hess: bool = config.get("save_hess", False)
     if save_hess:
         with h5py.File(datafile, "a") as h5f:

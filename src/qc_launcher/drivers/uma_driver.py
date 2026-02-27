@@ -58,6 +58,8 @@ class UMADriver(BaseDriver):
             self.calc = self.build_calc()
         self.update_atoms(atoms)
         energy = self.calc.get_potential_energy(self.atoms)
+        print(f"Total Energy        [eV]: {energy:16.10f}")
+        print(f"Total Energy        [Eh]: {energy / Hartree:16.10f}")
         return energy
 
     def _compute_hessian_impl(

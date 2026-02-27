@@ -68,7 +68,7 @@ def setup_constraints(atoms: Atoms, cons_dict: dict) -> Constraints:
 def run_opt(
     driver: BaseDriver,
     config: dict,
-    input_name: str = "molecule",
+    filename: str = "molecule",
 ) -> BaseDriver:
     """
     Run geometry optimization using the Sella optimizer with the specified driver and configuration.
@@ -87,7 +87,7 @@ def run_opt(
     else:
         eig = config.get("calc_hess", False)
         order = 0
-    tractory = config.get("trajectory", f"{input_name}_opt.traj")
+    tractory = config.get("trajectory", f"{filename}_opt.traj")
     internal = config.get("internal", True)
     delta0 = float(config.get("delta0", 0.1))
     eta = float(config.get("eta", 1e-4))
@@ -99,9 +99,9 @@ def run_opt(
     cons = setup_constraints(atoms, cons_dict)
     constraints_tol = config.get("constraints_tol", 1e-5)
     # convergence criteria
-    ediff_criterion = float(config.get("ediff", 1e-6)) * Hartree
-    fmax_criterion = float(config.get("fmax", 4.5e-4)) * Hartree / Bohr
-    frms_criterion = float(config.get("frms", 3.0e-4)) * Hartree / Bohr
+    ediff_criterion = float(config.get("ediff", 1e-6 * Hartree))
+    fmax_criterion = float(config.get("fmax", 4.5e-4 * Hartree / Bohr))
+    frms_criterion = float(config.get("frms", 3.0e-4 * Hartree / Bohr))
     dmax_criterion = float(config.get("dmax", 1.8e-3))
     drmx_criterion = float(config.get("drmx", 1.2e-3))
     max_steps = config.get("max_steps", 150)
@@ -128,7 +128,7 @@ def run_opt(
     # run optimization
     last_pos = atoms.get_positions().copy()
     last_energy = np.inf
-    for i in sella.irun(fmax=0, steps=max_steps):
+    for _ in sella.irun(fmax=0, steps=max_steps):
         delta_pos = np.linalg.norm(atoms.get_positions() - last_pos, axis=1)
         delta_energy = abs(atoms.get_potential_energy() - last_energy)
         fmax = np.max(np.abs(atoms.get_forces()))
@@ -146,14 +146,14 @@ def run_opt(
         last_energy = atoms.get_potential_energy()
     else:
         print("Optimization did not converge within the maximum number of steps.")
-        print(f"Final Energy Change   : {delta_energy:.6e} Eh")
-        print(f"Final MAX force       : {fmax * Bohr / Hartree:.6e} Eh/Bohr")
-        print(f"Final RMS force       : {frms * Bohr / Hartree:.6e} Eh/Bohr")
-        print(f"Final MAX displacement: {dmax:.6e} Angstrom")
-        print(f"Final RMS displacement: {drms:.6e} Angstrom")
+        print(f"Final Energy Change   : {delta_energy:.6e} eV")
+        print(f"Final MAX force       : {fmax:.6e} eV/Å")
+        print(f"Final RMS force       : {frms:.6e} eV/Å")
+        print(f"Final MAX displacement: {dmax:.6e} Å")
+        print(f"Final RMS displacement: {drms:.6e} Å")
     
     # save final structure
-    opt_outputfile = config.get("outputfile", f"{input_name}_opt.xyz")
+    opt_outputfile = config.get("outputfile", f"{filename}_opt.xyz")
     ase.io.write(opt_outputfile, atoms, columns=["symbols", "positions"])
     
     # record end time

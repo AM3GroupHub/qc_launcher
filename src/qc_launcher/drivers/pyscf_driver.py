@@ -334,6 +334,7 @@ class PySCFDriver(BaseDriver):
         e_disp = scf_summary.get("disp", 0.0)  # dispersion energy
         e_solvent = scf_summary.get("solvent", 0.0)  # solvent energy
         # log results
+        print(f"Total Energy        [eV]: {e_tot_eV:16.10f}")
         print(f"Total Energy        [Eh]: {e_tot:16.10f}")
         print(f"One-electron Energy [Eh]: {e1:16.10f}")
         print(f"Coulomb Energy      [Eh]: {e_coul:16.10f}")
