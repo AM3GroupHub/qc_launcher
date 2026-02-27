@@ -20,7 +20,18 @@ class MACEDriver(BaseDriver):
     ):
         super().__init__(atoms=atoms, config=config)
         self.calc: MACECalculator = None
-        
+        self._add_spin_tag()
+
+    def _add_spin_tag(self):
+        # the tag of "multiplicity" in MACE is `spin`, which is different from the `spin` in pyscf
+        self.atoms.info["spin"] = self.atoms.info.get("multiplicity", 1)
+    
+    def update_atoms(self, atoms: Optional[Atoms]) -> bool:
+        updated = super().update_atoms(atoms)
+        if updated:
+            self._add_spin_tag()
+        return updated
+
     def build_calc(self) -> MACECalculator:
         model_path = self.config["model_path"]
         device = self.config.get("device", None)

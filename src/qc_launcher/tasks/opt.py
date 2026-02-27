@@ -69,7 +69,7 @@ def run_opt(
     driver: BaseDriver,
     config: dict,
     filename: str = "molecule",
-) -> BaseDriver:
+) -> None:
     """
     Run geometry optimization using the Sella optimizer with the specified driver and configuration.
     """
@@ -161,4 +161,3 @@ def run_opt(
     print(f"Optimization completed in {end_time - start_time:.2f} seconds.")
 
     driver.update_atoms(atoms)
-    return driver

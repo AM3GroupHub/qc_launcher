@@ -54,3 +54,24 @@ def dump_normal_mode(mol: gto.Mole, results: Dict[str, np.ndarray]) -> None:
         dump('Normal mode            %s\n' % ('       x     y     z'*(col1-col0)))
         for j, at in enumerate(symbols):
             dump('    %4d%4s               %s\n' % (j, at, mode_inline(j, col0, col1)))
+
+
+def write_pyvibms(
+    filename: str,
+    symbols: list,
+    freq_wavenumbers: np.ndarray,
+    norm_mode: np.ndarray,
+) -> None:
+    n_atoms = len(symbols)
+    n_modes = len(freq_wavenumbers)
+
+    with open(filename, "w") as f:
+        f.write(f"{n_atoms} {n_modes}\n\n")
+        for i, (freq, mode) in enumerate(zip(freq_wavenumbers, norm_mode)):
+            f.write(f"N {freq:.4f} NULL {i+1}\n")
+            for m in mode.reshape(-1):
+                f.write(f"{m:.4f}\n")
+            if i < n_modes - 1:
+                f.write("\n")
+            else:
+                f.write("END\n")

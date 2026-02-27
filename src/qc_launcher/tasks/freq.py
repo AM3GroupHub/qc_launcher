@@ -9,7 +9,7 @@ from qc_launcher.drivers import BaseDriver
 from pyscf import symm
 from pyscf.hessian import thermo
 
-from qc_launcher.utils.utils import dump_normal_mode
+from qc_launcher.utils.utils import dump_normal_mode, write_pyvibms
 
 
 def run_freq(
@@ -23,13 +23,20 @@ def run_freq(
     # record the start time
     start_time = time.time()
     
+    # get config
+    datafile = config.get("datafile", f"{filename}_data.h5")
+    temp = config.get("temperature", 298.15)
+    press = config.get("pressure", 101325)
+    vibfile = config.get("vibfile", f"{filename}_vib.txt")
+    save_hess: bool = config.get("save_hess", False)
+    save_freq: bool = config.get("save_freq", False)
+
     # compute the hessian
     hessian = driver.compute_hessian(use_cache=True, hess_format="pyscf")
     end_time = time.time()
     print(f"Hessian computation completed in {end_time - start_time:.2f} seconds.")
 
-    datafile = config.get("datafile", f"{filename}_data.h5")
-    save_hess: bool = config.get("save_hess", False)
+    # save hessian
     if save_hess:
         with h5py.File(datafile, "a") as h5f:
             h5f.create_dataset("hessian", data=hessian)
@@ -43,16 +50,17 @@ def run_freq(
     num_imag = np.sum(freq_au < 0)
     if num_imag > 0:
         print(f"Note: {num_imag} imaginary frequencies detected!")
-    temp = config.get("temperature", 298.15)
-    press = config.get("pressure", 101325)
     thermo_info = thermo.thermo(mf, freq_au, temp=temp, press=press)
     # log thermo info
     dump_normal_mode(mf.mol, freq_info)
     thermo.dump_thermo(mf.info, thermo_info)
+    write_pyvibms(vibfile, driver.atoms.get_chemical_symbols(),
+        freq_info["freq_wavenumber"], freq_info["norm_mode"]
+    )
     end_time = time.time()
     print(f"Vibrational analysis completed in {end_time - start_time:.2f} seconds.")
+    
     # save frequencies and normal modes
-    save_freq: bool = config.get("save_freq", False)
     if save_freq:
         with h5py.File(datafile, "a") as h5f:
             h5f.create_dataset("freq_wavenumber", data=freq_info["freq_wavenumber"])

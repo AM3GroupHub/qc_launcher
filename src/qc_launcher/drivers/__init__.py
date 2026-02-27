@@ -1,7 +1,25 @@
-"""
-Quantum chemistry calculators for different software packages.
-"""
-
+import importlib
 from .base_driver import BaseDriver
 
-__all__ = ["BaseDriver"]
+
+_DRIVER_MAP = {
+    "pyscf": (".pyscf_driver", "PySCFDriver"),
+    "mace": (".mace_driver", "MACEDriver"),
+    "uma": (".uma_driver", "UMADriver"),
+    "xTB": (".tblite_driver", "TBLiteDriver"),
+}
+
+
+def get_driver(name: str, config: dict) -> BaseDriver:
+    """
+    Factory function to get a driver instance by name.
+    """
+    if name not in _DRIVER_MAP:
+        raise ValueError(f"Unknown driver: {name}")
+    module_name, class_name = _DRIVER_MAP[name]
+    module = importlib.import_module(module_name, package=__package__)
+    driver_class = getattr(module, class_name)
+    return driver_class(config)
+
+
+__all__ = ["BaseDriver", "get_driver"]

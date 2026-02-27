@@ -15,7 +15,6 @@ class BaseDriver(ABC):
         Args:
             atoms: ASE Atoms object.
             config: Configuration dictionary containing driver parameters.
-            **kwargs: Additional keyword arguments for ASE Calculator.
         """
         self.atoms = atoms
         self.config = config

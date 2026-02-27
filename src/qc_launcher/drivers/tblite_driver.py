@@ -366,16 +366,15 @@ class TBLiteDriver(BaseDriver):
         natm = len(self.atoms)
         hessian = np.zeros((natm, natm, 3, 3))  # pyscf format
         eps = self.config.get("finite_diff_eps", 5e-3)
-        atoms_copy = self.atoms.copy()
         for i in range(natm):
             for j in range(3):
-                atoms_copy.positions[i, j] += eps
-                res_plus = self.run_kernel(atoms_copy, use_cache=True)
+                self.atoms.positions[i, j] += eps
+                res_plus = self.run_kernel(use_cache=True)
                 grad_plus = res_plus["gradient"]
-                atoms_copy.positions[i, j] -= 2 * eps
-                res_minus = self.run_kernel(atoms_copy, use_cache=True)
+                self.atoms.positions[i, j] -= 2 * eps
+                res_minus = self.run_kernel(use_cache=True)
                 grad_minus = res_minus["gradient"]
                 hessian[i, :, j, :] = (grad_plus - grad_minus) / (2 * eps)
-                atoms_copy.positions[i, j] += eps
+                self.atoms.positions[i, j] += eps
         hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
         return hessian
