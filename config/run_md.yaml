@@ -1,0 +1,40 @@
+md:
+  ensemble: NVT                 # choose from NVE, NVT, NPT, Langevin, NoseHooverChainNVT, MTKNPT, IsotropicMTKNPT
+  minimize: true                # whether to pre-minimize
+  optimizer: FIRE               # choose from FIRE, FIRE2, LBFGS
+  opt_kwargs: null              # additional kwargs for the optimizer
+  fmax: 0.05                    # maximum force for optimization (eV/Å)
+  max_min_steps: 500            # maximum steps for optimization
+  min_trajectory: ???_min.traj  # trajectory file for optimization steps
+  timestep: 1.0                 # MD timestep in fs
+  temperature: 300.0            # temperature for NVT/NPT ensembles in K
+  nsteps: 1000                  # number of MD steps to run
+  loginterval: 100              # interval for logging MD information
+  trajectory: ???_md.traj       # trajectory file for MD steps
+  logfile: ???_md.log           # log file for MD information
+  append_trajectory: false      # whether to append to existing trajectory file
+  init_velocities: true         # whether to initialize velocities according to temperature
+  seed: 42                      # random seed for velocity initialization
+
+# example for different ensembles:
+md:
+  ensemble: NVE    # or `VelocityVerlet`
+
+md:
+  ensemble: Langevin
+  friction: 0.002  # friction coefficient in 1/fs
+
+md:
+  ensemble: NVT    # or `NoseHooverChainNVT`
+  tdamp: 100.0     # thermostat damping time in fs  (default: 100 * timestep)
+  tchain: 3        # number of Nose-Hoover chain
+  tloop: 1         # number of sub-steps in thermostat integration
+
+md:
+  ensemble: NPT    # or `MTKNPT`  (IsotropicMTKNPT` for isotropic cell only)
+  tdamp: 100.0     # thermostat damping time in fs  (default: 100 * timestep)
+  pdamp: 1000.0    # barostat damping time in fs  (default: 1000 * timestep)
+  tchain: 3        # number of Nose-Hoover chain
+  pchain: 3        # number of barostat chain
+  tloop: 1         # number of sub-steps in thermostat integration
+  ploop: 1         # number of sub-steps in barostat integration

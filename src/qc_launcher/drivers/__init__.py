@@ -14,6 +14,7 @@ def get_driver(name: str, config: dict) -> BaseDriver:
     """
     Factory function to get a driver instance by name.
     """
+    name = name.lower()
     if name not in _DRIVER_MAP:
         raise ValueError(f"Unknown driver: {name}")
     module_name, class_name = _DRIVER_MAP[name]

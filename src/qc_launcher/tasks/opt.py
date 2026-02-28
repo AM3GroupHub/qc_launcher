@@ -88,6 +88,7 @@ def run_opt(
         eig = config.get("calc_hess", False)
         order = 0
     tractory = config.get("trajectory", f"{filename}_opt.traj")
+    opt_outputfile = config.get("outputfile", f"{filename}_opt.xyz")
     internal = config.get("internal", True)
     delta0 = float(config.get("delta0", 0.1))
     eta = float(config.get("eta", 1e-4))
@@ -153,7 +154,6 @@ def run_opt(
         print(f"Final RMS displacement: {drms:.6e} Å")
     
     # save final structure
-    opt_outputfile = config.get("outputfile", f"{filename}_opt.xyz")
     ase.io.write(opt_outputfile, atoms, columns=["symbols", "positions"])
     
     # record end time

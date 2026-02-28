@@ -1,0 +1,59 @@
+driver:
+  name: PySCF
+  xc: B3LYP             # exchange-correlation functional
+  basis: def2-SVP       # basis set
+  ecp: null             # effective core potential
+  nlc: null             # non-local correlation functional
+  disp: null            # dispersion correction
+  grids: null           # grid settings for DFT
+  nlcgrids: null        # grid settings for non-local correlation
+  verbose: 2            # verbosity level (0-5, higher is more verbose)
+  scf_conv_tol: 1e-8    # SCF convergence tolerance
+  direct_scf_tol: 1e-8  # direct SCF convergence tolerance
+  scf_max_cycle: 100    # maximum number of SCF cycles
+  level_shift: 0.0      # level shift for SCF convergence
+  diis_space: 8         # number of DIIS vectors to use
+  retry_soscf: false    # whether to retry with SOSCF if SCF fails
+  with_df: true         # whether to use density fitting
+  auxbasis: null        # auxiliary basis set for density fitting
+  with_gpu: true        # whether to use GPU4PySCF
+  with_solvent: false   # whether to use implicit solvent model
+  solvent:
+    method: IEF-PCM     # implicit solvent method
+    eps: 78.4           # dielectric constant of the solvent
+    solvent: water      # solvent name
+  max_memory: null      # maximum memory in GB
+  threads: null         # number of threads to use
+
+# example: grid settings for DFT
+driver:  # set grid level (1-9, higher is more accurate)
+  grids:
+    level: 5
+  nlcgrids:
+    level: 3
+
+driver:  # set custom grid settings for DFT
+  grids:
+    atom_grid: [99, 590]
+  nlcgrids:
+    atom_grid: [50, 194]
+
+# example: solvation model
+driver:  # set with dielectric constant (first read this)
+  with_solvent: true
+  solvent:
+    method: IEF-PCM
+    eps: 78.4
+
+driver:  # set with solvent name (then read this)
+  with_solvent: true
+  solvent:
+    method: IEF-PCM
+    solvent: water
+
+driver:  # set with custom solvent parameters
+  with_solvent: true
+  solvent:
+    method: SMD         # n, n25, alpha, beta, gamma, epsilon, phi, psi
+    solvent_descriptor: [1.3843, 1.3766, 0.0, 0.45, 35.06, 13.45, 0.0, 0.0]
+    

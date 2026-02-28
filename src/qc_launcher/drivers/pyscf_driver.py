@@ -118,7 +118,7 @@ class PySCFDriver(BaseDriver):
         self.update_atoms(atoms)
         config = self.config if config is None else config
         xc = config.get("xc", "B3LYP")
-        basis = config.get("basis", "def2-svp")
+        basis = config.get("basis", "def2-SVP")
         ecp = config.get("ecp", None)
         nlc = config.get("nlc", None)
         disp = config.get("disp", None)

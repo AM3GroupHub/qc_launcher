@@ -11,7 +11,7 @@ def run_neb(
     config: dict,
     atoms_list: list,
     filename: str = "molecule",
-) -> BaseDriver:
+) -> None:
 
     # check if all images have the same atoms
     symbols_list = [atoms.symbols for atoms in atoms_list]

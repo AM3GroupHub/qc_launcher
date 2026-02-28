@@ -1,0 +1,27 @@
+opt:
+  ts: false          # perform OptTS or not
+  calc_hess: false   # calculate exact Hessian or not
+  trajectory: ???_opt.traj  # trajectory file name
+  internal: false    # use internal coordinates or not
+  delta0: 0.1        # initial step size
+  eta: 1e-4          # step size scaling factor
+  gamma: 0.1         # trust radius scaling factor
+  nsteps_per_diag: 3 # interval steps of checking whether to diagonalize Hessian. (calculate exact Hessian if approximate Hessian has inaccurate numbers of imaginary frequencies)
+  diag_every_n: null # interval steps of diagonalizing Hessian. (calculate exact Hessian every n steps)
+  constraints: null  # constraints for optimization
+  constraints_tol: 1e-5  # tolerance for constraints violation
+  ediff: 2.72e-5     # energy convergence criterion in eV
+  fmax: 2.31e-2      # maximum force convergence criterion in eV/Å
+  frms: 1.54e-2      # root mean square force convergence criterion in eV/Å
+  dmax: 1.8e-3       # maximum displacement convergence criterion in Å
+  drmx: 1.2e-3       # root mean square displacement convergence criterion in Å
+  max_steps: 150     # maximum steps of optimization
+  outputfile: ???_opt.xyz  # output file name for optimized structure
+
+# constraints example;
+opt:
+  constraints:
+    fix_translation: [0, 5]  # fix translation of atoms 0 and 5
+    fix_bond: [[0, 1], [2, 3]]  # fix bond length between atoms 0 and 1, and between atoms 2 and 3
+    fix_angle: [[0, 1, 2], [3, 4, 5]]  # fix angle between atoms 0, 1, and 2, and between atoms 3, 4, and 5
+    fix_dihedral: [[0, 1, 2, 3], [4, 5, 6, 7]]  # fix dihedral angle between atoms 0, 1, 2, and 3, and between atoms 4, 5, 6, and 7
