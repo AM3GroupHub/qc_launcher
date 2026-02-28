@@ -98,7 +98,8 @@ class PySCFDriver(BaseDriver):
         config: dict,
     ):
         super().__init__(atoms=atoms, config=config)
-        self.is_3c = self.config.get("xc", "B3LYP").endswith("3c")
+        xc: str = self.config.get("xc", "B3LYP")
+        self.is_3c = xc.lower().endswith("3c")
         self.method = self.build_method()
         self.gradient_method = None
         self.hessian_method = None
@@ -229,11 +230,11 @@ class PySCFDriver(BaseDriver):
     def build_method(self, atoms: Optional[Atoms] = None):
         if self.is_3c:
             from gpu4pyscf.drivers.dft_3c_driver import parse_3c, gen_disp_fun
-            xc = self.config.get("xc", "B973c")
+            xc = self.config.get("xc", "B973c").lower()
             xc = xc.replace("-3c", "3c")  # allow both "B973c" and "B97-3c"
             # modify config dictionary for 3c method
             config_3c = self.config.copy()
-            pyscf_xc, nlc, basis, ecp, (xc_disp, disp), xc_gcp = parse_3c(xc.lower())
+            pyscf_xc, nlc, basis, ecp, (xc_disp, disp), xc_gcp = parse_3c(xc)
             config_3c["xc"] = pyscf_xc
             config_3c["nlc"] = nlc
             config_3c["basis"] = basis
@@ -249,9 +250,9 @@ class PySCFDriver(BaseDriver):
     def build_gradient_method(self):
         if self.is_3c:
             from gpu4pyscf.drivers.dft_3c_driver import parse_3c, gen_disp_grad_fun
-            xc = self.config.get("xc", "B973c")
+            xc = self.config.get("xc", "B973c").lower()
             xc = xc.replace("-3c", "3c")  # allow both "B973c" and "B97-3c"
-            _, _, _, _, (xc_disp, disp), xc_gcp = parse_3c(xc.lower())
+            _, _, _, _, (xc_disp, disp), xc_gcp = parse_3c(xc)
             g = self.method.nuc_grad_method()
             g.get_dispersion = MethodType(gen_disp_grad_fun(xc_disp, xc_gcp), g)
             return g
@@ -260,9 +261,9 @@ class PySCFDriver(BaseDriver):
     def build_hessian_method(self):
         if self.is_3c:
             from gpu4pyscf.drivers.dft_3c_driver import parse_3c, gen_disp_hess_fun
-            xc = self.config.get("xc", "B973c")
+            xc = self.config.get("xc", "B973c").lower()
             xc = xc.replace("-3c", "3c")  # allow both "B973c" and "B97-3c"
-            _, _, _, _, (xc_disp, disp), xc_gcp = parse_3c(xc.lower())
+            _, _, _, _, (xc_disp, disp), xc_gcp = parse_3c(xc)
             h = self.method.Hessian()
             h.get_dispersion = MethodType(gen_disp_hess_fun(xc_disp, xc_gcp), h)
             h.auxbasis_response = 2
