@@ -25,8 +25,8 @@ def run_freq(
     
     # get config
     datafile = config.get("datafile", f"{filename}_data.h5")
-    temp = config.get("temperature", 298.15)
-    press = config.get("pressure", 101325)
+    temperature = config.get("temperature", 298.15)
+    pressure = config.get("pressure", 101325)
     vibfile = config.get("vibfile", f"{filename}_vib.txt")
     save_hess: bool = config.get("save_hess", False)
     save_freq: bool = config.get("save_freq", False)
@@ -50,10 +50,10 @@ def run_freq(
     num_imag = np.sum(freq_au < 0)
     if num_imag > 0:
         print(f"Note: {num_imag} imaginary frequencies detected!")
-    thermo_info = thermo.thermo(mf, freq_au, temp=temp, press=press)
+    thermo_info = thermo.thermo(mf, freq_au, temperature=temperature, pressure=pressure)
     # log thermo info
     dump_normal_mode(mf.mol, freq_info)
-    thermo.dump_thermo(mf.info, thermo_info)
+    thermo.dump_thermo(mf.mol, thermo_info)
     write_pyvibms(vibfile, driver.atoms.get_chemical_symbols(),
         freq_info["freq_wavenumber"], freq_info["norm_mode"]
     )

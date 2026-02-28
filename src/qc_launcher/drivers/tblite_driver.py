@@ -157,10 +157,10 @@ class TBLiteCalculator(TBLite):
             self._res = None
             converged = False
         if not converged and self.try_annealing:
-            eTemp = self.parameters.electronic_temperature
+            etemp = self.parameters.electronic_temperature
             res = heating_annealing(
                 self._xtb,
-                temp=eTemp * Hartree / kB,
+                temp=etemp * Hartree / kB,
                 max_temp=self.annealing_config["max_temp"],
                 heating_step=self.annealing_config["heating_step"],
                 annealing_step=self.annealing_config["annealing_step"],
@@ -204,7 +204,7 @@ class TBLiteDriver(BaseDriver):
         multiplicity = self.atoms.info.get("multiplicity", 1)
         accuracy = self.config.get("accuracy", 1.0)
         guess = self.config.get("guess", "sad")
-        eTemp = self.config.get("eTemp", 298.15)
+        etemp = self.config.get("etemp", 298.15)
         max_iter = self.config.get("max_iter", 250)
         mixer_damping = self.config.get("mixer_damping", 0.4)
         electric_field = self.config.get("electric_field", None)
@@ -235,9 +235,9 @@ class TBLiteDriver(BaseDriver):
             charge=charge,
             multiplicity=multiplicity,
             accuracy=accuracy,
-            guess=guess,
-            electronic_temperature=eTemp,
-            max_iter=max_iter,
+            initial_guess=guess,
+            electronic_temperature=etemp,
+            max_iterations=max_iter,
             mixer_damping=mixer_damping,
             electric_field=electric_field,
             spin_polarization=spin_polarization,
@@ -265,14 +265,16 @@ class TBLiteDriver(BaseDriver):
             periodic=periodic,
         )
         xtb.set("accuracy", self.config.get("accuracy", 1.0))
-        xtb.set("temperature", self.config.get("eTemp", 298.15) * kB / Hartree)
+        guess_mapping = {"sad": 0, "eeq": 1}
+        xtb.set("guess", guess_mapping[self.config.get("guess", "sad").lower()])
+        xtb.set("temperature", self.config.get("etemp", 298.15) * kB / Hartree)
         xtb.set("max-iter", self.config.get("max_iter", 250))
         xtb.set("mixer-damping", self.config.get("mixer_damping", 0.4))
         xtb.set("verbosity", self.config.get("verbosity", 0))
         # external fields and spin polarization
         electric_field = self.config.get("electric_field", None)
         if electric_field is not None:
-            xtb.add("electric-field", np.asarray(electric_field))
+            xtb.add("electric-field", np.asarray(electric_field) * Bohr / Hartree)
         spin_polarization = self.config.get("spin_polarization", None)
         if spin_polarization is not None:
             xtb.add("spin-polarization", spin_polarization)
@@ -335,12 +337,12 @@ class TBLiteDriver(BaseDriver):
             converged = False
         if not converged and self.try_annealing:
             print("Initial calculation failed to converge. Starting heating-annealing procedure...")
-            eTemp = self.config.get("eTemp", 298.15)
+            etemp = self.config.get("etemp", 298.15)
             annealing_config = self.config.get("annealing", {})
             max_temp = annealing_config.get("max_temp", 5000.0)
             heating_step = annealing_config.get("heating_step", 300.0)
             annealing_step = annealing_config.get("annealing_step", 50.0)
-            res = heating_annealing(self.xtb, temp=eTemp, max_temp=max_temp, heating_step=heating_step, annealing_step=annealing_step)
+            res = heating_annealing(self.xtb, temp=etemp, max_temp=max_temp, heating_step=heating_step, annealing_step=annealing_step)
             converged = res is not None
         if use_cache and converged:
             self._res_cache = res
@@ -374,7 +376,7 @@ class TBLiteDriver(BaseDriver):
                 self.atoms.positions[i, j] -= 2 * eps
                 res_minus = self.run_kernel(use_cache=True)
                 grad_minus = res_minus["gradient"]
-                hessian[i, :, j, :] = (grad_plus - grad_minus) / (2 * eps)
+                hessian[i, :, j, :] = (grad_plus - grad_minus) / (2 * eps / Bohr)
                 self.atoms.positions[i, j] += eps
         hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
         return hessian

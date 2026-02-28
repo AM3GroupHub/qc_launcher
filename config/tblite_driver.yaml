@@ -1,0 +1,29 @@
+driver:
+  name: TBLite
+  method: GFN2-xTB        # TBLite method (GFN1-xTB, GFN2-xTB)
+  accuracy: 1.0           # numerical threshold for SCC
+  guess: sad              # initial guess method
+  etemp: 298.15           # electronic temperature in K
+  max_iter: 250           # maximum number of iterations
+  mixer_damping: 0.4      # mixer parameter for SCC
+  electric_field: null    # electric field in V/Å, e.g. [0.0, 0.0, 0.1]
+  spin_polarization: null # spin polarization scaling factor
+  solvation: null         # solvation model
+
+# example: solvation model
+driver:
+  solvation:
+    method: alpb    # or `gbsa`
+    solvent: water
+    solution_state: gsolv  # or `bar1mol`, `reference`
+
+driver:
+  solvation:
+    method: cpcm
+    epsilon: 78.4
+
+driver:
+  solvation:
+    method: gbe  # or `gb`
+    epsilon: 78.4
+    born_kernel: still # or `p16`

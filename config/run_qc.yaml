@@ -18,7 +18,14 @@ opt:
   max_steps: 150     # maximum steps of optimization
   outputfile: ???_opt.xyz  # output file name for optimized structure
 
-# constraints example;
+freq:
+  temperature: 298.15   # temperature for thermochemical analysis in K
+  pressure: 101325      # pressure for thermochemical analysis in Pa
+  vibfile: ???_vib.txt  # vibration file for PyVibMS
+  save_hess: false      # save Hessian matrix or not
+  save_freq: false      # save frequencies or not
+
+# constraints example
 opt:
   constraints:
     fix_translation: [0, 5]  # fix translation of atoms 0 and 5

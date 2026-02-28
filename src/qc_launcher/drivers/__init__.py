@@ -7,7 +7,7 @@ _DRIVER_MAP = {
     "pyscf": (".pyscf_driver", "PySCFDriver"),
     "mace": (".mace_driver", "MACEDriver"),
     "uma": (".uma_driver", "UMADriver"),
-    "xTB": (".tblite_driver", "TBLiteDriver"),
+    "tblite": (".tblite_driver", "TBLiteDriver"),
 }
 
 
