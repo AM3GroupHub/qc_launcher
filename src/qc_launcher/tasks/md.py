@@ -45,14 +45,14 @@ def run_md(
     nsteps = int(config.get("nsteps", 1000))
     loginterval = int(config.get("loginterval", 100))
     trajectory = config.get("trajectory", f"{filename}_md.traj")
-    logfile = config.get("logfile", f"{filename}_md.log")
+    logfile = config.get("logfile", "-")  # "-" means print to stdout
     append_trajectory = config.get("append_trajectory", False)
     init_velocities = config.get("init_velocities", True)
     seed = config.get("seed", 42)
     rng = np.random.default_rng(seed=seed)  # For reproducibility
 
     # read atoms tags to get constraints
-    fix_mask = ~np.asarray(atoms.get_tags(), dtype=bool)
+    fix_mask = np.asarray(atoms.get_tags(), dtype=bool)
     fix_indices = np.where(fix_mask)[0]
     if np.any(fix_indices):
         constraints = FixAtoms(indices=fix_indices)

@@ -1,0 +1,6 @@
+driver:
+  name: UMA
+  model_path: path_to_model/uma-s-1p1.pt  # path to the model file
+  atom_refs_path: path_to_model/iso_atom_elem_refs.yaml  # path to the atom reference file, default find `iso_atom_elem_refs.yaml` at the same directory as the model file
+  device: null                            # cuda or cpu, default auto-detect
+  task_name: omol                         # head name for UMA

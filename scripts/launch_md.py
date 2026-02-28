@@ -1,3 +1,4 @@
+import os
 import argparse
 
 import yaml
@@ -24,11 +25,15 @@ def main():
         atoms.info["charge"] = charge
     if multiplicity is not None:
         atoms.info["multiplicity"] = multiplicity
+    filename = os.path.splitext(os.path.basename(inputfile))[0]
     
+    # initialize driver
     driver_config = config["driver"]
     driver_name = driver_config.pop("name")
-    driver = get_driver(driver_name, driver_config)
-    run_md(driver, config)
+    driver = get_driver(driver_name, atoms, driver_config)
+    # load md configuration and run
+    md_config = config["md"]
+    run_md(driver, md_config, filename)
 
 if __name__ == "__main__":
     main()

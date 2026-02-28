@@ -1,3 +1,4 @@
+import os
 import argparse
 
 import yaml
@@ -24,15 +25,16 @@ def main():
         atoms.info["charge"] = charge
     if multiplicity is not None:
         atoms.info["multiplicity"] = multiplicity
+    filename = os.path.splitext(os.path.basename(inputfile))[0]
 
     driver_config: dict = config["driver"]
     driver_name: str = driver_config.pop("name")
-    driver = get_driver(driver_name, driver_config)
+    driver = get_driver(driver_name, atoms, driver_config)
 
     # task 1: optimization
     if "opt" in config:
         opt_config: dict = config["opt"]
-        run_opt(atoms, driver, opt_config)
+        run_opt(driver, opt_config, filename)
     
     # task 2: single point
     driver.compute_energy()
@@ -40,12 +42,12 @@ def main():
     # task 3: frequency
     if "freq" in config:
         freq_config: dict = config["freq"]
-        run_freq(atoms, driver, freq_config)
+        run_freq(driver, freq_config, filename)
 
     # task 4: IRC
     if "irc" in config:
         irc_config: dict = config["irc"]
-        run_irc(atoms, driver, irc_config)
+        run_irc(driver, irc_config, filename)
 
 
 if __name__ == "__main__":
