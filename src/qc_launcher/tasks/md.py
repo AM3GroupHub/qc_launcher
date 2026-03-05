@@ -1,11 +1,12 @@
 import time
 
 import numpy as np
-from ase.units import fs, Pascal
+from ase.units import fs, Pascal, GPa
 from ase.optimize import FIRE, FIRE2, LBFGS
 from ase.md.verlet import VelocityVerlet
 from ase.md.langevin import Langevin
 from ase.md.nose_hoover_chain import NoseHooverChainNVT, IsotropicMTKNPT, MTKNPT
+from ase.md.melchionna import MelchionnaNPT
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary, ZeroRotation
 from ase.md.logger import MDLogger
 from ase.constraints import FixAtoms
@@ -79,7 +80,7 @@ def run_md(
         MaxwellBoltzmannDistribution(atoms, temperature_K=temperature, rng=rng)
         Stationary(atoms)
         ZeroRotation(atoms)
-    
+
     # setup MD integrator based on ensemble
     if ensemble in {"NVE", "VelocityVerlet"}:
         dyn = VelocityVerlet(
@@ -157,6 +158,28 @@ def run_md(
             pchain=pchain,
             tloop=tloop,
             ploop=ploop,
+            trajectory=trajectory,
+            loginterval=loginterval,
+            append_trajectory=append_trajectory,
+        )
+    elif ensemble == "MelchionnaNPT":
+        externalstress = config.get("externalstress", 101325)  # Pa
+        if isinstance(externalstress, list):
+            externalstress = np.asarray(externalstress, dtype=float)
+        mask = config.get("mask", [1, 1, 1])  # default: isotropic pressure
+        mask = np.asarray(mask, dtype=bool)
+        ttime = float(config.get("ttime", timestep * 100))  # fs
+        ptime = float(config.get("ptime", timestep * 1000))  # fs
+        bulk_modulus = float(config.get("bulk_modulus", 100))  # GPa
+        pfactor = (ptime * fs) ** 2 * bulk_modulus * GPa
+        dyn = MelchionnaNPT(
+            atoms,
+            timestep=timestep * fs,
+            temperature_K=temperature,
+            externalstress=externalstress * Pascal,
+            mask=mask,
+            ttime=ttime * fs,
+            pfactor=pfactor,
             trajectory=trajectory,
             loginterval=loginterval,
             append_trajectory=append_trajectory,
