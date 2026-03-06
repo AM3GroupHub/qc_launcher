@@ -187,14 +187,13 @@ def run_md(
     else:
         raise ValueError(f"Unknown ensemble: {ensemble}.")
 
-    md_logger = MDLogger(dyn=dyn, atoms=atoms, logfile=logfile, stress=True)
-    dyn.attach(md_logger, interval=loginterval)
-    
     # run MD simulation
     print(f"Starting MD simulation for {nsteps} steps...")
     print(f"Timestep: {timestep} fs")
     print(f"Total simulation time: {nsteps * timestep / 1000:.2f} ps")
-    
+
+    md_logger = MDLogger(dyn=dyn, atoms=atoms, logfile=logfile, stress=True)
+    dyn.attach(md_logger, interval=loginterval)
     dyn.run(nsteps)
     
     # record end time
