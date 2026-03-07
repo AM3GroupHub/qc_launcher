@@ -22,6 +22,9 @@ freq:
   temperature: 298.15   # temperature for thermochemical analysis in K
   pressure: 101325      # pressure for thermochemical analysis in Pa
   vibfile: ???_vib.txt  # vibration file for PyVibMS
+  qrrho: true           # apply qRRHO correction to low-frequency vibrational thermochemistry
+  alpha: 4              # exponent in damping function omega(nu)
+  omega0: 100.0         # cutoff frequency in cm^-1
   save_hess: false      # save Hessian matrix or not
   save_freq: false      # save frequencies or not
 

@@ -93,6 +93,20 @@ class BaseDriver(ABC):
         pass
 
     @abstractmethod
+    def compute_forces(self, atoms: Optional[Atoms] = None) -> np.ndarray:
+        """
+        Compute the forces on each atom.
+        
+        This is software-specific and must be implemented by each subclass.
+        
+        Args:
+            atoms: ASE Atoms object. If None, use the internal Atoms object.
+        Returns:
+            Forces on each atom in eV/Angstrom, shape (N, 3).
+        """
+        pass
+
+    @abstractmethod
     def _compute_hessian_impl(
         self,
         atoms: Optional[Atoms],

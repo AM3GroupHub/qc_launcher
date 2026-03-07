@@ -9,7 +9,7 @@ from qc_launcher.drivers import BaseDriver
 from pyscf import symm
 from pyscf.hessian import thermo
 
-from qc_launcher.utils.utils import dump_normal_mode, write_pyvibms
+from qc_launcher.utils.utils import dump_normal_mode, write_pyvibms, qrrho_thermo
 
 
 def run_freq(
@@ -30,6 +30,9 @@ def run_freq(
     vibfile = config.get("vibfile", f"{filename}_vib.txt")
     save_hess: bool = config.get("save_hess", False)
     save_freq: bool = config.get("save_freq", False)
+    qrrho: bool = config.get("qrrho", True)
+    alpha: float = config.get("qrrho_alpha", 4.0)
+    omega0: float = config.get("qrrho_omega_cutoff", 100.0)
 
     # compute the hessian
     hessian = driver.compute_hessian(use_cache=True, hess_format="pyscf")
@@ -54,6 +57,23 @@ def run_freq(
     # log thermo info
     dump_normal_mode(mf.mol, freq_info)
     thermo.dump_thermo(mf.mol, thermo_info)
+    if qrrho:
+        qrrho_info = qrrho_thermo(
+            thermo_info=thermo_info,
+            freq=freq_au,
+            temperature=temperature,
+            omega0=omega0,
+            alpha=alpha,
+        )
+        print("\n============== quasi-RRHO correction =============")
+        print(f"RRHO  S_vib [Eh/K]    : {thermo_info['S_vib'][0]:16.10e}")
+        print(f"qRRHO S_vib [Eh/K]    : {qrrho_info['S_vib_qrrho'][0]:16.10e}")
+        print(f"RRHO  H_vib [Eh]      : {thermo_info['H_vib'][0]:16.10f}")
+        print(f"qRRHO H_vib [Eh]      : {qrrho_info['H_vib_qrrho'][0]:16.10f}")
+        print(f"RRHO  G_tot [Eh]      : {thermo_info['G_tot'][0]:16.10f}")
+        print(f"qRRHO G_tot [Eh]      : {qrrho_info['G_tot_qrrho'][0]:16.10f}")
+        print("==================================================\n")
+    
     write_pyvibms(vibfile, driver.atoms.get_chemical_symbols(),
         freq_info["freq_wavenumber"], freq_info["norm_mode"]
     )
