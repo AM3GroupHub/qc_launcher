@@ -1,7 +1,7 @@
 import os
 import sys
 from types import MethodType
-from typing import Optional, Literal
+from typing import Optional, Tuple
 
 import numpy as np
 from pyscf import gto, lib, dft
@@ -306,7 +306,7 @@ class PySCFDriver(BaseDriver):
         if use_cache:  # save new density matrix to cache
             self._dm_cache = self.method.make_rdm1()
         
-        return energy * Hartree  # convert from Hartree to eV
+        return energy  # in Hartree
 
     def to_ase_calc(self):
         if self.gradient_method is None:
@@ -325,9 +325,8 @@ class PySCFDriver(BaseDriver):
             self.run_kernel(use_cache=False)  # run SCF to ensure method is converged before returning
         return self.method
 
-    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
-        e_tot_eV = self.run_kernel(atoms=atoms, use_cache=True)
-        e_tot = self.method.e_tot  # in Hartree
+    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
+        e_tot = self.run_kernel(atoms=atoms, use_cache=True)
         scf_summary = self.method.scf_summary
         e1 = scf_summary.get("e1", 0.0)        # one-electron energy
         e_coul = scf_summary.get("coul", 0.0)  # Coulomb energy
@@ -335,8 +334,6 @@ class PySCFDriver(BaseDriver):
         e_disp = scf_summary.get("disp", 0.0)  # dispersion energy
         e_solvent = scf_summary.get("solvent", 0.0)  # solvent energy
         # log results
-        print(f"Total Energy        [eV]: {e_tot_eV:16.10f}")
-        print(f"Total Energy        [Eh]: {e_tot:16.10f}")
         print(f"One-electron Energy [Eh]: {e1:16.10f}")
         print(f"Coulomb Energy      [Eh]: {e_coul:16.10f}")
         print(f"XC Energy           [Eh]: {e_xc:16.10f}")
@@ -363,8 +360,40 @@ class PySCFDriver(BaseDriver):
             nocc = self.method.mol.nelectron // 2
             print(f"LUMO [Eh]: {mo_energy[nocc]:12.6f}")
             print(f"HOMO [Eh]: {mo_energy[nocc-1]:12.6f}")
-        return e_tot_eV
+        return e_tot, "Eh"
 
+    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
+        self.run_kernel(atoms=atoms, use_cache=True)
+        if self.gradient_method is None:
+            self.gradient_method = self.build_gradient_method()
+        grad = self.gradient_method.kernel()
+        return -grad, "Eh/Bohr"
+
+    def _compute_hessian_impl(
+        self,
+        atoms: Optional[Atoms],
+    ) -> np.ndarray:
+        numerical_hess = self.config.get("numerical_hess", False)
+        if numerical_hess:
+            with_gpu = self.config.get("with_gpu", True)
+            if with_gpu:
+                from qc_launcher.utils import finite_diff_gpu as finite_diff
+            else:
+                from pyscf.tools import finite_diff
+            finite_diff_eps = self.config.get("finite_diff_eps", 5e-3)
+            if self.gradient_method is None:
+                self.gradient_method = self.build_gradient_method()
+            finite_diff_h = finite_diff.Hessian(self.gradient_method)
+            finite_diff_h.displacement = finite_diff_eps / Bohr  # convert from Angstrom to Bohr
+            hessian = finite_diff_h.kernel()
+        else:
+            self.run_kernel(atoms=atoms, use_cache=True)
+            if self.hessian_method is None:
+                self.hessian_method = self.build_hessian_method()
+            hessian = self.hessian_method.kernel()
+        
+        return hessian
+    
     def compute_resp(self, atoms: Optional[Atoms] = None) -> np.ndarray:
         from gpu4pyscf.pop import esp
         from qc_launcher.utils.topology import get_constraints_idx, rdkit_mol_from_pyscf
@@ -389,31 +418,3 @@ class PySCFDriver(BaseDriver):
         for i, charge in enumerate(q2):
             print(f"{i+1:3d} {charge:16.10f}")
         return q2
-
-    def _compute_hessian_impl(
-        self,
-        atoms: Optional[Atoms],
-        hess_format: Literal["pyscf", "ase"] = "ase",
-    ) -> np.ndarray:
-        numerical_hess = self.config.get("numerical_hess", False)
-        if numerical_hess:
-            with_gpu = self.config.get("with_gpu", True)
-            if with_gpu:
-                from qc_launcher.utils import finite_diff_gpu as finite_diff
-            else:
-                from pyscf.tools import finite_diff
-            finite_diff_eps = self.config.get("finite_diff_eps", 5e-3)
-            if self.gradient_method is None:
-                self.gradient_method = self.build_gradient_method()
-            finite_diff_h = finite_diff.Hessian(self.gradient_method)
-            finite_diff_h.displacement = finite_diff_eps / Bohr  # convert from Angstrom to Bohr
-            hessian = finite_diff_h.kernel()
-        else:
-            self.run_kernel(atoms=atoms, use_cache=True)
-            if self.hessian_method is None:
-                self.hessian_method = self.build_hessian_method()
-            hessian = self.hessian_method.kernel()
-        
-        hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
-        return hessian
-    

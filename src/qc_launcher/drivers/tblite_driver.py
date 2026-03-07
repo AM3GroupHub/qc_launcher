@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import Optional, List, Tuple
 from types import SimpleNamespace
 
 import numpy as np
@@ -348,21 +348,24 @@ class TBLiteDriver(BaseDriver):
             self._res_cache = res
         return res
         
-    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
         res = self.run_kernel(atoms)
         if res is None:
             print("Failed to converge")
-            return None
-        e_tot = res["energy"]  # in Hartree
-        e_tot_eV = e_tot * Hartree  # convert from Hartree to eV
-        print(f"Total Energy        [eV]: {e_tot_eV:16.10f}")
-        print(f"Total Energy        [Eh]: {e_tot:16.10f}")
-        return e_tot_eV  # return energy in eV
+            return np.nan, "Eh"
+        return res["energy"], "Eh"
+
+    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
+        res = self.run_kernel(atoms)
+        if res is None:
+            print("Failed to converge")
+            natm = len(self.atoms)
+            return np.full((natm, 3), np.nan), "Eh/Bohr"
+        return -res["gradient"], "Eh/Bohr"
 
     def _compute_hessian_impl(
         self,
         atoms: Optional[Atoms],
-        hess_format: Literal["pyscf", "ase"] = "ase",
     ) -> np.ndarray:
         self.update_atoms(atoms)
         natm = len(self.atoms)
@@ -378,5 +381,4 @@ class TBLiteDriver(BaseDriver):
                 grad_minus = res_minus["gradient"]
                 hessian[i, :, j, :] = (grad_plus - grad_minus) / (2 * eps / Bohr)
                 self.atoms.positions[i, j] += eps
-        hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
         return hessian

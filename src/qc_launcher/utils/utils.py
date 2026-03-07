@@ -84,7 +84,8 @@ def qrrho_thermo(
     freq: np.ndarray,
     temperature: float = 298.15,
     omega0: float = 100.0,
-    alpha: float = 4.0
+    alpha: float = 4.0,
+    b_av: float = 1.0e-44,  # doi/10.1002/chem.201200497
 ):
     kB = nist.BOLTZMANN
     h = nist.PLANCK
@@ -111,10 +112,9 @@ def qrrho_thermo(
     h_ho = 0.5 * rt + rt / (np.expm1(rt))  # H_vib / (R*T) (including zero-point energy)
     
     # entropy and enthalpy for FR (free rotor)
-    B_av = 1.0e-44  # doi/10.1002/chem.201200497
     nu_hz = real_freq_au * au2hz
     mu_v = h / (8.0 * np.pi**2 * nu_hz)
-    mu_eff = (mu_v * B_av) / (mu_v + B_av)
+    mu_eff = (mu_v * b_av) / (mu_v + b_av)
     
     # partition function for free rotor
     q_fr_sqr = 8.0 * np.pi**3 * mu_eff * kB * temperature / h**2

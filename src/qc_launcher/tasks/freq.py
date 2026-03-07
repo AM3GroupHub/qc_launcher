@@ -1,8 +1,10 @@
 import time
+from typing import Union
 
 import h5py
 import numpy as np
-from ase.units import Bohr
+from ase.units import Bohr, _Nav
+from ase.units import m as meter
 
 from qc_launcher.drivers import BaseDriver
 
@@ -31,8 +33,9 @@ def run_freq(
     save_hess: bool = config.get("save_hess", False)
     save_freq: bool = config.get("save_freq", False)
     qrrho: bool = config.get("qrrho", True)
-    alpha: float = config.get("qrrho_alpha", 4.0)
-    omega0: float = config.get("qrrho_omega_cutoff", 100.0)
+    alpha: float = config.get("alpha", 4.0)
+    omega0: float = config.get("omega0", 100.0)
+    Bav: Union[float, str] = config.get("Bav", 1.0e-44)
 
     # compute the hessian
     hessian = driver.compute_hessian(use_cache=True, hess_format="pyscf")
@@ -58,12 +61,39 @@ def run_freq(
     dump_normal_mode(mf.mol, freq_info)
     thermo.dump_thermo(mf.mol, thermo_info)
     if qrrho:
+        if isinstance(Bav, str) and Bav.lower() == "auto":
+            # calculate Bav = Tr[I] / 3
+            mol = mf.mol
+            atom_coords = mol.atom_coords()
+            mass = mol.atom_mass_list(isotope_avg=True)
+            mass_center = np.sum(atom_coords * mass[:, None], axis=0) / np.sum(mass)
+            atom_coords -= mass_center
+            r_sq = np.sum(atom_coords**2, axis=1)
+            tr_I = 2.0 * np.sum(mass * r_sq)
+            rot_const = thermo_info["rot_const"]
+            rotor_type = thermo._get_rotor_type(rot_const)
+            if rotor_type == "ATOM":
+                b_av = 0.0
+            elif rotor_type == "LINEAR":
+                b_av = tr_I / 2.0
+            else:
+                b_av = tr_I / 3.0
+            # convert from g/mol*Bohr^2 to kg*m^2
+            b_av *= (1e-3 * Bohr**2 / (_Nav * meter**2))
+        elif isinstance(Bav, float):
+            b_av = Bav
+        else:
+            raise ValueError("Invalid Bav value. Use a float or 'auto'.")
+        if b_av < 1e-50:
+            print("Warning: Bav is very small, setting to 1e-50 to avoid numerical issues.")
+            b_av = 1e-50
         qrrho_info = qrrho_thermo(
             thermo_info=thermo_info,
             freq=freq_au,
             temperature=temperature,
             omega0=omega0,
             alpha=alpha,
+            b_av=b_av,
         )
         print("\n============== quasi-RRHO correction =============")
         print(f"RRHO  S_vib [Eh/K]    : {thermo_info['S_vib'][0]:16.10e}")

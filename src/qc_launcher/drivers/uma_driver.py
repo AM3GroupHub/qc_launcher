@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Literal
+from typing import Optional, Tuple
 from types import SimpleNamespace
 
 import numpy as np
@@ -64,19 +64,23 @@ class UMADriver(BaseDriver):
         dummy_mf = SimpleNamespace(mol=mol, e_tot=e_tot)
         return dummy_mf
 
-    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
         if self.calc is None:
             self.calc = self.build_calc()
         self.update_atoms(atoms)
         energy = self.calc.get_potential_energy(self.atoms)
-        print(f"Total Energy        [eV]: {energy:16.10f}")
-        print(f"Total Energy        [Eh]: {energy / Hartree:16.10f}")
-        return energy
+        return energy, "eV"
+    
+    def _compute_forces_impl(self, atoms: Optional[Atoms] = None) -> Tuple[np.ndarray, str]:
+        if self.calc is None:
+            self.calc = self.build_calc()
+        self.update_atoms(atoms)
+        forces = self.calc.get_forces(self.atoms)
+        return forces, "eV/Ang"
 
     def _compute_hessian_impl(
         self,
         atoms: Optional[Atoms],
-        hess_format: Literal["pyscf", "ase"] = "ase",
     ) -> np.ndarray:
         self.update_atoms(atoms)
         eps = self.config.get("finite_diff_eps", 5e-3)
@@ -113,5 +117,4 @@ class UMADriver(BaseDriver):
                 forces_plus = forces[2 * idx].flatten().cpu().numpy()
                 forces_minus = forces[2 * idx + 1].flatten().cpu().numpy()
                 hessian[:, idx] = (forces_minus - forces_plus) / (2 * eps) # forces is the negative graidents
-        hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
         return hessian

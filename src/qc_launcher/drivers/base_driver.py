@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Literal
+from typing import Optional, Literal, Tuple
 
 import numpy as np
 from ase import Atoms
@@ -79,7 +79,7 @@ class BaseDriver(ABC):
         pass
 
     @abstractmethod
-    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+    def _compute_energy_impl(self, atoms: Optional[Atoms]) -> Tuple[float, str]:
         """
         Compute the potential energy of the system.
         
@@ -88,12 +88,13 @@ class BaseDriver(ABC):
         Args:
             atoms: ASE Atoms object. If None, use the internal Atoms object.
         Returns:
-            Potential energy in eV.
+            Potential energy.
+            String indicating the unit of the returned energy ('eV' or 'Eh').
         """
         pass
 
     @abstractmethod
-    def compute_forces(self, atoms: Optional[Atoms] = None) -> np.ndarray:
+    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
         """
         Compute the forces on each atom.
         
@@ -103,6 +104,7 @@ class BaseDriver(ABC):
             atoms: ASE Atoms object. If None, use the internal Atoms object.
         Returns:
             Forces on each atom in eV/Angstrom, shape (N, 3).
+            String indicating the unit of the returned forces ('eV/Ang' or 'Eh/Bohr').
         """
         pass
 
@@ -110,7 +112,6 @@ class BaseDriver(ABC):
     def _compute_hessian_impl(
         self,
         atoms: Optional[Atoms],
-        hess_format: Literal["pyscf", "ase"] = "ase",
     ) -> np.ndarray:
         """
         Compute the Hessian matrix.
@@ -124,7 +125,55 @@ class BaseDriver(ABC):
             Hessian matrix, pyscf format (N, N, 3, 3) in a.u., or ase format (3N, 3N) in eV/Angstrom^2.
         """
         pass
-    
+
+    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+        """
+        Compute the potential energy of the system.
+        
+        This is software-specific and must be implemented by each subclass.
+        
+        Args:
+            atoms: ASE Atoms object. If None, use the internal Atoms object.
+        Returns:
+            Potential energy in eV.
+        """
+        energy, unit = self._compute_energy_impl(atoms)
+        if unit == "Eh":
+            energy_Eh = energy
+            energy_eV = energy * Hartree
+        elif unit == "eV":
+            energy_eV = energy
+            energy_Eh = energy / Hartree
+        else:
+            raise ValueError("Invalid energy unit. Use 'eV' or 'Eh'.")
+        print(f"Total Energy        [eV]: {energy_eV:16.10f}")
+        print(f"Total Energy        [Eh]: {energy_Eh:16.10f}")
+        return energy_eV
+
+    def compute_forces(self, atoms: Optional[Atoms] = None) -> np.ndarray:
+        """
+        Compute the forces on each atom.
+        
+        This is software-specific and must be implemented by each subclass.
+        
+        Args:
+            atoms: ASE Atoms object. If None, use the internal Atoms object.
+        Returns:
+            Forces on each atom in eV/Angstrom, shape (N, 3).
+        """
+        forces, unit = self._compute_forces_impl(atoms)
+        if unit == "Eh/Bohr":
+            forces_eV_Ang = forces * (Hartree / Bohr)
+        elif unit == "eV/Ang":
+            forces_eV_Ang = forces
+        else:
+            raise ValueError("Invalid forces unit. Use 'eV/Ang' or 'Eh/Bohr'.")
+        # print forces table
+        print("Forces [eV/Angstrom]:")
+        for i, f in enumerate(forces_eV_Ang):
+            print(f"{i:3d} {f[0]:12.6f} {f[1]:12.6f} {f[2]:12.6f}")
+        return forces_eV_Ang
+
     def compute_hessian(
         self, 
         atoms: Optional[Atoms] = None,
@@ -156,7 +205,8 @@ class BaseDriver(ABC):
             return self._convert_hessian_format(atoms, cached, hess_format)
         
         # Compute Hessian
-        hessian = self._compute_hessian_impl(atoms, hess_format=hess_format)
+        hessian = self._compute_hessian_impl(atoms)
+        hessian = self._convert_hessian_format(atoms, hessian, hess_format)
         
         # Cache the result
         if use_cache:
@@ -167,8 +217,6 @@ class BaseDriver(ABC):
     def clear_cache(self):
         """Clear all cached data."""
         self._hessian_cache.clear()
-            
-        # ==================== Helper Methods ====================
     
     def _get_cache_key(self, positions: np.ndarray, tolerance: float = 1e-4) -> str:
         """

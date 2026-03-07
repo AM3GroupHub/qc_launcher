@@ -1,4 +1,4 @@
-from typing import Optional, Literal
+from typing import Optional, Tuple
 from types import SimpleNamespace
 
 import numpy as np
@@ -70,25 +70,28 @@ class MACEDriver(BaseDriver):
         dummy_mf = SimpleNamespace(mol=mol, e_tot=e_tot)
         return dummy_mf
 
-    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
         if self.calc is None:
             self.calc = self.build_calc()
         self.update_atoms(atoms)
         energy = self.calc.get_potential_energy(self.atoms)
-        print(f"Total Energy        [eV]: {energy:16.10f}")
-        print(f"Total Energy        [Eh]: {energy / Hartree:16.10f}")
-        return energy
+        return energy, "eV"
+
+    def _compute_forces_impl(self, atoms):
+        if self.calc is None:
+            self.calc = self.build_calc()
+        self.update_atoms(atoms)
+        forces = self.calc.get_forces(self.atoms)
+        return forces, "eV/Ang"
 
     def _compute_hessian_impl(
         self,
         atoms: Optional[Atoms],
-        hess_format: Literal["pyscf", "ase"] = "ase",
     ) -> np.ndarray:
         if self.calc is None:
             self.calc = self.build_calc()
         self.update_atoms(atoms)
         natm = len(self.atoms)
         hessian = self.calc.get_hessian(self.atoms).reshape(natm * 3, natm * 3)
-        hessian = self._convert_hessian_format(hessian=hessian, hess_format=hess_format)
         return hessian
     
