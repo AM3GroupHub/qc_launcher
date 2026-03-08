@@ -206,7 +206,7 @@ class BaseDriver(ABC):
         
         # Compute Hessian
         hessian = self._compute_hessian_impl(atoms)
-        hessian = self._convert_hessian_format(atoms, hessian, hess_format)
+        hessian = self._convert_hessian_format(hessian, hess_format)
         
         # Cache the result
         if use_cache:

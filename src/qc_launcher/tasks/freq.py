@@ -70,7 +70,7 @@ def run_freq(
             atom_coords -= mass_center
             r_sq = np.sum(atom_coords**2, axis=1)
             tr_I = 2.0 * np.sum(mass * r_sq)
-            rot_const = thermo_info["rot_const"]
+            rot_const = thermo_info["rot_const"][0]
             rotor_type = thermo._get_rotor_type(rot_const)
             if rotor_type == "ATOM":
                 b_av = 0.0
