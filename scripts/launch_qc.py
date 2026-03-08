@@ -1,5 +1,6 @@
 import os
 import argparse
+import time
 
 import yaml
 import ase.io
@@ -37,7 +38,16 @@ def main():
         run_opt(driver, opt_config, filename)
     
     # task 2: single point
+    start_time = time.time()
     driver.compute_energy()
+    end_time = time.time()
+    print(f"Single point energy calculation completed in {end_time - start_time:.2f} seconds.\n")
+    
+    if "forces" in config:
+        start_time = time.time()
+        driver.compute_forces()
+        end_time = time.time()
+        print(f"Force calculation completed in {end_time - start_time:.2f} seconds.\n")
 
     # task 3: frequency
     if "freq" in config:
