@@ -1,6 +1,8 @@
+import os
 import time
 
 import numpy as np
+import ase.io
 from ase.units import fs, Pascal, GPa
 from ase.optimize import FIRE, FIRE2, LBFGS
 from ase.md.verlet import VelocityVerlet
@@ -50,7 +52,24 @@ def run_md(
     append_trajectory = config.get("append_trajectory", False)
     init_velocities = config.get("init_velocities", True)
     seed = config.get("seed", 42)
+    resume = config.get("resume", False)
     rng = np.random.default_rng(seed=seed)  # For reproducibility
+
+    # try to resume from existing trajectory if requested
+    if resume and os.path.exists(trajectory):
+        print(f"Resuming from existing trajectory: {trajectory}")
+        atoms_traj = ase.io.Trajectory(trajectory)
+        atoms = atoms_traj[-1]  # load the last frame
+        # modify some parameters for resuming
+        existing_steps = len(atoms_traj) * loginterval
+        if existing_steps >= nsteps:
+            print(f"Existing trajectory already has {existing_steps} steps, which is >= requested {nsteps} steps. No need to run MD.")
+            return
+        nsteps -= existing_steps  # only run the remaining steps
+        append_trajectory = True  # append to existing trajectory
+        print(f"Resuming MD simulation for remaining {nsteps} steps...")
+        init_velocities = False  # do not re-initialize velocities when resuming
+        minimize = False  # do not re-minimize when resuming
 
     # read atoms tags to get constraints
     fix_mask = np.asarray(atoms.get_tags(), dtype=bool)
