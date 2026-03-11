@@ -1,13 +1,13 @@
 import os
 import argparse
-import time
+import json
 
 import yaml
 import ase.io
 
 from qc_launcher.drivers import get_driver
-from qc_launcher.tasks import run_opt, run_freq, run_irc
-
+from qc_launcher.tasks import run_sp, run_grad, run_opt, run_freq, run_irc
+from qc_launcher.utils.utils import to_jsonable
 
 def main():
     parser = argparse.ArgumentParser(description="Launch a script with a YAML configuration file.")
@@ -32,33 +32,51 @@ def main():
     driver_name: str = driver_config.pop("name")
     driver = get_driver(driver_name, atoms, driver_config)
 
+    # initialize results dictionary
+    results = {}
+
     # task 1: optimization
     if "opt" in config:
         opt_config: dict = config["opt"]
-        run_opt(driver, opt_config, filename)
+        opt_results = run_opt(driver, opt_config, filename)
+        results.update(opt_results)
     
     # task 2: single point
-    start_time = time.time()
-    driver.compute_energy()
-    end_time = time.time()
-    print(f"Single point energy calculation completed in {end_time - start_time:.2f} seconds.\n")
-    
-    if "forces" in config:
-        start_time = time.time()
-        driver.compute_forces()
-        end_time = time.time()
-        print(f"Force calculation completed in {end_time - start_time:.2f} seconds.\n")
+    sp_results = run_sp(driver)
+    results.update(sp_results)
+
+    if "forces" in config and config["forces"]:
+        grad_results = run_grad(driver)
+        results.update(grad_results)
 
     # task 3: frequency
     if "freq" in config:
         freq_config: dict = config["freq"]
-        run_freq(driver, freq_config, filename)
+        freq_results = run_freq(driver, freq_config, filename)
+        results.update(freq_results)
 
     # task 4: IRC
     if "irc" in config:
         irc_config: dict = config["irc"]
-        run_irc(driver, irc_config, filename)
+        irc_results = run_irc(driver, irc_config, filename)
+        results.update(irc_results)
 
+    save_json = config.get("save_json", False)
+    if save_json:
+        json_output = config.get("json_output", f"{filename}_db.json")
+        system = {
+            "symbols": atoms.get_chemical_symbols(),
+            "positions": atoms.get_positions().tolist(),
+            "charge": atoms.info.get("charge", 0),
+            "multiplicity": atoms.info.get("multiplicity", 1),
+        }
+        json_dict = {
+            "system": system,
+            "config": config,
+            "results": results,
+        }
+        with open(json_output, "w") as f:
+            json.dump(to_jsonable(json_dict), f, indent=4)
 
 if __name__ == "__main__":
     main()

@@ -116,12 +116,12 @@ class TBLiteCalculator(TBLite):
     def __init__(
         self,
         atoms: Optional[Atoms] = None,
-        try_annealing: bool = False,
+        retry_annealing: bool = False,
         annealing_config: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(atoms, **kwargs)
-        self.try_annealing = try_annealing
+        self.retry_annealing = retry_annealing
         self.annealing_config = {
             "max_temp": 5000.0,
             "heating_step": 300.0,
@@ -156,7 +156,7 @@ class TBLiteCalculator(TBLite):
             print(e)
             self._res = None
             converged = False
-        if not converged and self.try_annealing:
+        if not converged and self.retry_annealing:
             etemp = self.parameters.electronic_temperature
             res = heating_annealing(
                 self._xtb,
@@ -195,7 +195,8 @@ class TBLiteDriver(BaseDriver):
         self.calc: TBLiteCalculator = None
         self.xtb: Calculator = None
         self._res_cache: Result = None
-        self.try_annealing = self.config.get("try_annealing", False)
+        self.retry_annealing = self.config.get("retry_annealing", False)
+        self._extra_results = {}  # store extra results such as energy components, orbital energies, etc.
 
     def build_calc(self, atoms: Optional[Atoms] = None) -> TBLiteCalculator:
         self.update_atoms(atoms)
@@ -243,6 +244,7 @@ class TBLiteDriver(BaseDriver):
             spin_polarization=spin_polarization,
             solvation=solv_args,
             verbosity=verbosity,
+            retry_annealing=self.retry_annealing,
         )
         return calc
 
@@ -335,7 +337,7 @@ class TBLiteDriver(BaseDriver):
             print(e)
             res = None
             converged = False
-        if not converged and self.try_annealing:
+        if not converged and self.retry_annealing:
             print("Initial calculation failed to converge. Starting heating-annealing procedure...")
             etemp = self.config.get("etemp", 298.15)
             annealing_config = self.config.get("annealing", {})
@@ -349,10 +351,12 @@ class TBLiteDriver(BaseDriver):
         return res
         
     def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
+        self._extra_results.clear()  # clear previous extra results
         res = self.run_kernel(atoms)
         if res is None:
             print("Failed to converge")
             return np.nan, "Eh"
+
         return res["energy"], "Eh"
 
     def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
@@ -361,6 +365,8 @@ class TBLiteDriver(BaseDriver):
             print("Failed to converge")
             natm = len(self.atoms)
             return np.full((natm, 3), np.nan), "Eh/Bohr"
+        self._extra_results["charges"] = (res["charges"], "e")
+        self._extra_results["dipole"] = (res["dipole"] * Bohr, "e*Bohr")
         return -res["gradient"], "Eh/Bohr"
 
     def _compute_hessian_impl(
@@ -382,3 +388,9 @@ class TBLiteDriver(BaseDriver):
                 hessian[i, :, j, :] = (grad_plus - grad_minus) / (2 * eps / Bohr)
                 self.atoms.positions[i, j] += eps
         return hessian
+
+    def dump_extra_results(self) -> dict:
+        """
+        Dump any extra results from the driver that are not covered by energy, forces, or Hessian.
+        """
+        return self._extra_results.copy()

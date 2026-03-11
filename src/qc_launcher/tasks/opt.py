@@ -69,7 +69,7 @@ def run_opt(
     driver: BaseDriver,
     config: dict,
     filename: str = "molecule",
-) -> None:
+) -> dict:
     """
     Run geometry optimization using the Sella optimizer with the specified driver and configuration.
     """
@@ -87,7 +87,7 @@ def run_opt(
     else:
         eig = config.get("calc_hess", False)
         order = 0
-    tractory = config.get("trajectory", f"{filename}_opt.traj")
+    trajectory = config.get("trajectory", f"{filename}_opt.traj")
     opt_outputfile = config.get("outputfile", f"{filename}_opt.xyz")
     internal = config.get("internal", True)
     delta0 = float(config.get("delta0", 0.1))
@@ -112,7 +112,7 @@ def run_opt(
     hessian_func = lambda x: driver.compute_hessian(x, use_cache=True, hess_format="ase")
     sella = Sella(
         atoms=atoms,
-        trajectory=tractory,
+        trajectory=trajectory,
         order=order,
         internal=internal,
         constraints=cons,
@@ -161,3 +161,20 @@ def run_opt(
     print(f"Optimization completed in {end_time - start_time:.2f} seconds.")
 
     driver.update_atoms(atoms)
+
+    # store trajectory to results
+    atoms_traj = ase.io.Trajectory(trajectory)
+    traj_pos, traj_energies, traj_forces = [], [], []
+    for frame in atoms_traj:
+        traj_pos.append(frame.get_positions())
+        traj_energies.append(frame.get_potential_energy())
+        traj_forces.append(frame.get_forces())
+    traj_pos = np.stack(traj_pos)
+    traj_energies = np.array(traj_energies)
+    traj_forces = np.stack(traj_forces)
+    
+    return {"opt_traj": {
+        "positions": (traj_pos, "Ang"),
+        "energies": (traj_energies, "eV"),
+        "forces": (traj_forces, "eV/Ang"),
+    }}

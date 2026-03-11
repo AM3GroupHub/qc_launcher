@@ -142,3 +142,17 @@ def qrrho_thermo(
     results['H_tot_qrrho'] = (_sum_qrrho('H'), 'Eh')
     results['G_tot_qrrho'] = (_sum_qrrho('G'), 'Eh')
     return results
+
+
+def to_jsonable(obj):
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, dict):
+        return {str(k): to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [to_jsonable(v) for v in obj]
+    return str(obj)

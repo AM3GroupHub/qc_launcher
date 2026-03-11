@@ -1,7 +1,6 @@
 import time
 from typing import Union
 
-import h5py
 import numpy as np
 from ase.units import Bohr, _Nav
 from ase.units import m as meter
@@ -18,20 +17,18 @@ def run_freq(
     driver: BaseDriver,
     config: dict,
     filename: str = "molecule",
-) -> None:
+) -> dict:
     if "symm_geom_tol" in config:
         symm.geom.TOLERANCE = config["symm_geom_tol"] / Bohr  # convert from Angstrom to Bohr
 
     # record the start time
+    results = {}
     start_time = time.time()
     
     # get config
-    datafile = config.get("datafile", f"{filename}_data.h5")
     temperature = config.get("temperature", 298.15)
     pressure = config.get("pressure", 101325)
     vibfile = config.get("vibfile", f"{filename}_vib.txt")
-    save_hess: bool = config.get("save_hess", False)
-    save_freq: bool = config.get("save_freq", False)
     qrrho: bool = config.get("qrrho", True)
     alpha: float = config.get("alpha", 4.0)
     omega0: float = config.get("omega0", 100.0)
@@ -43,9 +40,7 @@ def run_freq(
     print(f"Hessian computation completed in {end_time - start_time:.2f} seconds.")
 
     # save hessian
-    if save_hess:
-        with h5py.File(datafile, "a") as h5f:
-            h5f.create_dataset("hessian", data=hessian)
+    results["hessian"] = (hessian, "Eh/Bohr^2")
     
     # vibrational analysis
     start_time = time.time()
@@ -56,10 +51,20 @@ def run_freq(
     num_imag = np.sum(freq_au < 0)
     if num_imag > 0:
         print(f"Note: {num_imag} imaginary frequencies detected!")
+
+    # save frequencies and normal modes
+    results["frequencies"] = (freq_info["freq_wavenumber"], "cm^-1")
+    results["normal_modes"] = (freq_info["norm_mode"], "")
+
+    # calculate and log thermo info
     thermo_info = thermo.thermo(mf, freq_au, temperature=temperature, pressure=pressure)
-    # log thermo info
     dump_normal_mode(mf.mol, freq_info)
     thermo.dump_thermo(mf.mol, thermo_info)
+
+    # save thermo info
+    results.update(thermo_info)
+
+    # apply quasi-RRHO correction if requested
     if qrrho:
         if isinstance(Bav, str) and Bav.lower() == "auto":
             # calculate Bav = Tr[I] / 3
@@ -103,16 +108,14 @@ def run_freq(
         print(f"RRHO  G_tot [Eh]      : {thermo_info['G_tot'][0]:16.10f}")
         print(f"qRRHO G_tot [Eh]      : {qrrho_info['G_tot_qrrho'][0]:16.10f}")
         print("==================================================\n")
-    
+        
+        # save qRRHO thermo info
+        results.update(qrrho_info)
+
     write_pyvibms(vibfile, driver.atoms.get_chemical_symbols(),
         freq_info["freq_wavenumber"], freq_info["norm_mode"]
     )
     end_time = time.time()
     print(f"Vibrational analysis completed in {end_time - start_time:.2f} seconds.")
-    
-    # save frequencies and normal modes
-    if save_freq:
-        with h5py.File(datafile, "a") as h5f:
-            h5f.create_dataset("freq_wavenumber", data=freq_info["freq_wavenumber"])
-            h5f.create_dataset("norm_mode", data=freq_info["norm_mode"])
-    
+
+    return results

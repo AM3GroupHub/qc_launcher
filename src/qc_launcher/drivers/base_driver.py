@@ -202,7 +202,7 @@ class BaseDriver(ABC):
         # Check cache
         if use_cache and cache_key in self._hessian_cache:
             cached = self._hessian_cache[cache_key]
-            return self._convert_hessian_format(atoms, cached, hess_format)
+            return self._convert_hessian_format(cached, hess_format)
         
         # Compute Hessian
         hessian = self._compute_hessian_impl(atoms)
@@ -213,7 +213,18 @@ class BaseDriver(ABC):
             self._hessian_cache[cache_key] = hessian
             
         return hessian
+    
+    def dump_extra_results(self) -> dict:
+        """
+        Dump any extra results from the driver that are not covered by energy, forces, or Hessian.
         
+        This can be overridden by subclasses to provide additional information.
+        
+        Returns:
+            A dictionary of extra results.
+        """
+        return {}
+
     def clear_cache(self):
         """Clear all cached data."""
         self._hessian_cache.clear()

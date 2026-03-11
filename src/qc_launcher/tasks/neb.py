@@ -26,7 +26,7 @@ def run_neb(
     steps = config.get("steps", 1000)
     climb_after = config.get("climb_after", 0)
     spring_constant = float(config.get("spring_constant", 0.1))
-    neb_method = config.get("neb_method", "improved_tangent")
+    neb_method = config.get("neb_method", "improvedtangent")
     opt_termial: bool = config.get("opt_terminal", True)
     interpolate_method: str = config.get("interpolate_method", "idpp")
     trajectory = config.get("trajectory", f"{filename}_neb.traj")
@@ -83,16 +83,16 @@ def run_neb(
     stage1_steps = climb_after if climb else steps
     if stage1_steps > 0:
         print("Starting NEB ...")
-        opt.run(fmax=fmax, steps=stage1_steps)
+        converged = opt.run(fmax=fmax, steps=stage1_steps)
     # stage 2: CI-NEB if requested
     if climb:
         print("Starting CI-NEB ...")
         neb.climb = True
-        opt.run(fmax=fmax, steps=steps-stage1_steps)
+        converged = opt.run(fmax=fmax, steps=steps-stage1_steps)
     images = neb.images
     
     # chekc convergence
-    if opt.converged():
+    if converged:
         print("NEB optimization converged!")
     else:
         print("NEB optimization did not converge within the maximum number of steps.")
