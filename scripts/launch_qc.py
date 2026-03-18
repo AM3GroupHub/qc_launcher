@@ -37,7 +37,13 @@ def main():
 
     # task 1: optimization
     if "opt" in config:
-        opt_config: dict = config["opt"]
+        opt_setting = config["opt"]
+        if isinstance(opt_setting, dict):
+            opt_config = opt_setting
+        elif isinstance(opt_setting, bool) and opt_setting:
+            opt_config = {}
+        else:
+            raise ValueError("Invalid opt configuration. Must be a dict or a boolean.")
         opt_results = run_opt(driver, opt_config, filename)
         results.update(opt_results)
     
@@ -45,19 +51,32 @@ def main():
     sp_results = run_sp(driver)
     results.update(sp_results)
 
-    if "forces" in config and config["forces"]:
+    if "forces" in config:
+        assert config["forces"] == True, "forces must be set to true to compute gradients"
         grad_results = run_grad(driver)
         results.update(grad_results)
 
     # task 3: frequency
     if "freq" in config:
-        freq_config: dict = config["freq"]
+        freq_setting = config["freq"]
+        if isinstance(freq_setting, dict):
+            freq_config = freq_setting
+        elif isinstance(freq_setting, bool) and freq_setting:
+            freq_config = {}
+        else:
+            raise ValueError("Invalid freq configuration. Must be a dict or a boolean.")
         freq_results = run_freq(driver, freq_config, filename)
         results.update(freq_results)
 
     # task 4: IRC
     if "irc" in config:
-        irc_config: dict = config["irc"]
+        irc_setting = config["irc"]
+        if isinstance(irc_setting, dict):
+            irc_config = irc_setting
+        elif isinstance(irc_setting, bool) and irc_setting:
+            irc_config = {}
+        else:
+            raise ValueError("Invalid irc configuration. Must be a dict or a boolean.")
         irc_results = run_irc(driver, irc_config, filename)
         results.update(irc_results)
 
