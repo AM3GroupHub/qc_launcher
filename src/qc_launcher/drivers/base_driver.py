@@ -8,7 +8,7 @@ from ase.calculators.calculator import Calculator
 
 
 class BaseDriver(ABC):    
-    def __init__(self, atoms: Atoms, config: dict):
+    def __init__(self, atoms: Atoms, config: dict, verbose: bool = True):
         """
         Initialize the base driver.
         
@@ -18,8 +18,14 @@ class BaseDriver(ABC):
         """
         self.atoms = atoms
         self.config = config
+        self.verbose = verbose
         self._hessian_cache = {}
-            
+
+    def log(self, message: str) -> None:
+        """Utility method for printing messages based on verbosity."""
+        if self.verbose:
+            print(message)
+
     def update_atoms(self, atoms: Optional[Atoms]) -> bool:
         """
         Update the internal state with new atomic positions.
@@ -146,8 +152,8 @@ class BaseDriver(ABC):
             energy_Eh = energy / Hartree
         else:
             raise ValueError("Invalid energy unit. Use 'eV' or 'Eh'.")
-        print(f"Total Energy        [eV]: {energy_eV:16.10f}")
-        print(f"Total Energy        [Eh]: {energy_Eh:16.10f}")
+        self.log(f"Total Energy        [eV]: {energy_eV:16.10f}")
+        self.log(f"Total Energy        [Eh]: {energy_Eh:16.10f}")
         return energy_eV
 
     def compute_forces(self, atoms: Optional[Atoms] = None) -> np.ndarray:
@@ -169,9 +175,9 @@ class BaseDriver(ABC):
         else:
             raise ValueError("Invalid forces unit. Use 'eV/Ang' or 'Eh/Bohr'.")
         # print forces table
-        print("Forces [eV/Angstrom]:")
+        self.log("Forces [eV/Angstrom]:")
         for i, f in enumerate(forces_eV_Ang):
-            print(f"{i:3d} {f[0]:12.6f} {f[1]:12.6f} {f[2]:12.6f}")
+            self.log(f"{i:3d} {f[0]:12.6f} {f[1]:12.6f} {f[2]:12.6f}")
         return forces_eV_Ang
 
     def compute_hessian(

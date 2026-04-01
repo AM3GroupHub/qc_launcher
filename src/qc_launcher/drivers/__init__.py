@@ -11,7 +11,7 @@ _DRIVER_MAP = {
 }
 
 
-def get_driver(name: str, atoms: Atoms,config: dict) -> BaseDriver:
+def get_driver(name: str, atoms: Atoms, config: dict, verbose: bool = True) -> BaseDriver:
     """
     Factory function to get a driver instance by name.
     """
@@ -21,7 +21,7 @@ def get_driver(name: str, atoms: Atoms,config: dict) -> BaseDriver:
     module_name, class_name = _DRIVER_MAP[name]
     module = importlib.import_module(module_name, package=__package__)
     driver_class = getattr(module, class_name)
-    return driver_class(atoms, config)
+    return driver_class(atoms, config, verbose=verbose)
 
 
 __all__ = ["BaseDriver", "get_driver"]

@@ -1,0 +1,36 @@
+inputfile: ???.xyz
+charge: null
+multiplicity: null
+
+driver:
+  # Any qc_launcher driver that can provide energies and forces can be used.
+  name: pyscf
+  xc: B3LYP
+  basis: def2-SVP
+  with_df: false
+  with_gpu: false
+
+gsm:
+  # The direct pysisyphus integration currently supports DE-GSM only.
+  # Provide a two-frame input file containing reactant and product.
+  max_nodes: 9
+  # num_images is kept as an alias for max_nodes.
+  # num_images: 9
+  max_iterations: 64
+  fmax: 0.05
+  max_step: 0.05
+  climb: true
+  reparameterize_interval: 3
+  coordinate_system: internal
+  # For cartesian runs, consider setting align: true.
+  # align: false
+  # Optional endpoint preoptimization before building the string.
+  # Uses ASE FIRE with the same gsm.fmax threshold.
+  # preopt: true
+  output:
+    workdir: scratch/gsm
+    # Keep pysisyphus internals only for debugging.
+    # keep_internal: true
+    # dump_optimizer: true
+  trajectory: ???_gsm.extxyz
+  ts_output: ???_ts.xyz

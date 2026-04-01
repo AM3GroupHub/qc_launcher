@@ -17,8 +17,9 @@ class MACEDriver(BaseDriver):
         self,
         atoms: Atoms,
         config: dict,
+        **kwargs,
     ):
-        super().__init__(atoms=atoms, config=config)
+        super().__init__(atoms=atoms, config=config, **kwargs)
         self.calc: MACECalculator = None
         self._add_spin_tag()
 

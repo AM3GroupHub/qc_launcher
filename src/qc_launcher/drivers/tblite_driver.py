@@ -190,8 +190,9 @@ class TBLiteDriver(BaseDriver):
         self,
         atoms: Atoms,
         config: dict,
+        **kwargs,
     ):
-        super().__init__(atoms=atoms, config=config)
+        super().__init__(atoms=atoms, config=config, **kwargs)
         self.calc: TBLiteCalculator = None
         self.xtb: Calculator = None
         self._res_cache: Result = None
@@ -334,11 +335,11 @@ class TBLiteDriver(BaseDriver):
             res = self.xtb.singlepoint(res=res)
             converged = True
         except TBLiteRuntimeError as e:
-            print(e)
+            self.log(e)
             res = None
             converged = False
         if not converged and self.retry_annealing:
-            print("Initial calculation failed to converge. Starting heating-annealing procedure...")
+            self.log("Initial calculation failed to converge. Starting heating-annealing procedure...")
             etemp = self.config.get("etemp", 298.15)
             annealing_config = self.config.get("annealing", {})
             max_temp = annealing_config.get("max_temp", 5000.0)
@@ -354,7 +355,7 @@ class TBLiteDriver(BaseDriver):
         self._extra_results.clear()  # clear previous extra results
         res = self.run_kernel(atoms)
         if res is None:
-            print("Failed to converge")
+            self.log("Failed to converge")
             return np.nan, "Eh"
 
         return res["energy"], "Eh"
@@ -362,7 +363,7 @@ class TBLiteDriver(BaseDriver):
     def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
         res = self.run_kernel(atoms)
         if res is None:
-            print("Failed to converge")
+            self.log("Failed to converge")
             natm = len(self.atoms)
             return np.full((natm, 3), np.nan), "Eh/Bohr"
         self._extra_results["charges"] = (res["charges"], "e")

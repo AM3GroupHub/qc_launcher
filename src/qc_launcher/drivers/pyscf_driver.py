@@ -96,8 +96,9 @@ class PySCFDriver(BaseDriver):
         self,
         atoms: Atoms,
         config: dict,
+        **kwargs,
     ):
-        super().__init__(atoms=atoms, config=config)
+        super().__init__(atoms=atoms, config=config, **kwargs)
         xc: str = self.config.get("xc", "B3LYP")
         self.is_3c = xc.lower().endswith("3c")
         self.method = self.build_method()
@@ -189,7 +190,7 @@ class PySCFDriver(BaseDriver):
                 cupy.get_default_memory_pool().free_all_blocks()
                 mf = mf.to_gpu()
             except ImportError:
-                print("GPU support is not available. Proceeding with CPU.")
+                self.log("GPU support is not available. Proceeding with CPU.")
     
         # solvation model
         if with_solvent:
@@ -301,7 +302,7 @@ class PySCFDriver(BaseDriver):
             energy = newton_method.kernel(mo_init, mocc_init)
             converged = newton_method.converged
             if converged:
-                print("SOSCF converged")
+                self.log("SOSCF converged")
                 self.method.mo_coeff = newton_method.mo_coeff
                 self.method.mo_occ = newton_method.mo_occ
         if use_cache:  # save new density matrix to cache
@@ -336,17 +337,17 @@ class PySCFDriver(BaseDriver):
         e_disp = scf_summary.get("disp", 0.0)  # dispersion energy
         e_solvent = scf_summary.get("solvent", 0.0)  # solvent energy
         # log results
-        print(f"One-electron Energy [Eh]: {e1:16.10f}")
-        print(f"Coulomb Energy      [Eh]: {e_coul:16.10f}")
-        print(f"XC Energy           [Eh]: {e_xc:16.10f}")
+        self.log(f"One-electron Energy [Eh]: {e1:16.10f}")
+        self.log(f"Coulomb Energy      [Eh]: {e_coul:16.10f}")
+        self.log(f"XC Energy           [Eh]: {e_xc:16.10f}")
         self._extra_results["e1"] = (e1, "Eh")
         self._extra_results["e_coul"] = (e_coul, "Eh")
         self._extra_results["e_xc"] = (e_xc, "Eh")
         if abs(e_disp) > 1e-10:
-            print(f"Dispersion Energy   [Eh]: {e_disp:16.10f}")
+            self.log(f"Dispersion Energy   [Eh]: {e_disp:16.10f}")
             self._extra_results["e_disp"] = (e_disp, "Eh")
         if abs(e_solvent) > 1e-10:
-            print(f"Solvent Energy      [Eh]: {e_solvent:16.10f}")
+            self.log(f"Solvent Energy      [Eh]: {e_solvent:16.10f}")
             self._extra_results["e_solvent"] = (e_solvent, "Eh")
         dm = self.method.make_rdm1()
         if not isinstance(dm, np.ndarray):
@@ -358,10 +359,10 @@ class PySCFDriver(BaseDriver):
             mo_energy[0].sort()
             mo_energy[1].sort()
             na, nb = self.method.nelec
-            print(f"LUMO Alpha [Eh]: {mo_energy[0][na]:12.6f}")
-            print(f"LUMO Beta  [Eh]: {mo_energy[1][nb]:12.6f}")
-            print(f"HOMO Alpha [Eh]: {mo_energy[0][na-1]:12.6f}")
-            print(f"HOMO Beta  [Eh]: {mo_energy[1][nb-1]:12.6f}")
+            self.log(f"LUMO Alpha [Eh]: {mo_energy[0][na]:12.6f}")
+            self.log(f"LUMO Beta  [Eh]: {mo_energy[1][nb]:12.6f}")
+            self.log(f"HOMO Alpha [Eh]: {mo_energy[0][na-1]:12.6f}")
+            self.log(f"HOMO Beta  [Eh]: {mo_energy[1][nb-1]:12.6f}")
             self._extra_results["lumo_alpha"] = (mo_energy[0][na], "Eh")
             self._extra_results["lumo_beta"] = (mo_energy[1][nb], "Eh")
             self._extra_results["homo_alpha"] = (mo_energy[0][na-1], "Eh")
@@ -369,8 +370,8 @@ class PySCFDriver(BaseDriver):
         else:  # closed-shell
             mo_energy.sort()
             nocc = self.method.mol.nelectron // 2
-            print(f"LUMO [Eh]: {mo_energy[nocc]:12.6f}")
-            print(f"HOMO [Eh]: {mo_energy[nocc-1]:12.6f}")
+            self.log(f"LUMO [Eh]: {mo_energy[nocc]:12.6f}")
+            self.log(f"HOMO [Eh]: {mo_energy[nocc-1]:12.6f}")
             self._extra_results["lumo"] = (mo_energy[nocc], "Eh")
             self._extra_results["homo"] = (mo_energy[nocc-1], "Eh")
         return e_tot, "Eh"
@@ -427,9 +428,9 @@ class PySCFDriver(BaseDriver):
             equal_constraints=equal_constraints,
         )
         # print RESP charges
-        print("RESP charges [e]:")
+        self.log("RESP charges [e]:")
         for i, charge in enumerate(q2):
-            print(f"{i+1:3d} {charge:16.10f}")
+            self.log(f"{i+1:3d} {charge:16.10f}")
         return q2
 
     def dump_extra_results(self):

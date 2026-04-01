@@ -49,6 +49,24 @@ freq:
 python scripts/launch_md.py config/run_md.yaml
 ```
 
+### Growing String Method
+
+```bash
+python scripts/launch_gsm.py config/run_gsm.yaml
+```
+
+`launch_gsm.py` runs double-ended GSM through the direct `pysisyphus` API.
+
+- Provide a two-frame input file containing reactant and product.
+- GSM is limited to the string search itself. TS optimization and IRC should be run as separate tasks.
+- Any qc_launcher driver that provides energies and forces can be used.
+- Install the local `pysisyphus` checkout into the runtime environment before using GSM:
+
+```bash
+cd ../pysisyphus
+pip install -e .
+```
+
 ## Supported Drivers
 
 - **pyscf**: Ab initio electronic structure calculations
@@ -61,6 +79,7 @@ python scripts/launch_md.py config/run_md.yaml
 - Geometry optimization (min/TS)
 - Frequency/vibrational analysis
 - Intrinsic reaction coordinate (IRC)
+- Growing string method (DE-GSM via `pysisyphus`)
 - Molecular dynamics (NVE/NVT/NPT)
 - Nudged elastic band (NEB)
 

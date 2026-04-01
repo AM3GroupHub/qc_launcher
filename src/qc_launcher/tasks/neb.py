@@ -18,7 +18,6 @@ def run_neb(
     if not all(np.array_equal(symbols, symbols_list[0]) for symbols in symbols_list):
         raise ValueError("All images must have the same atoms (same symbols in the same order).")
 
-
     # get config
     num_images = config.get("num_images", len(atoms_list) - 2)
     fmax = float(config.get("fmax", 0.05))
@@ -27,7 +26,7 @@ def run_neb(
     climb_after = config.get("climb_after", 0)
     spring_constant = float(config.get("spring_constant", 0.1))
     neb_method = config.get("neb_method", "improvedtangent")
-    opt_termial: bool = config.get("opt_terminal", True)
+    preopt: bool = config.get("preopt", True)
     interpolate_method: str = config.get("interpolate_method", "idpp")
     trajectory = config.get("trajectory", f"{filename}_neb.traj")
 
@@ -51,7 +50,7 @@ def run_neb(
     calc = driver.to_ase_calc()
     
     # optimize terminal images first
-    if opt_termial and init_chain:
+    if preopt and init_chain:
         images[0].calc = calc
         images[-1].calc = calc
         print("Optimizing initial image...")
@@ -103,3 +102,7 @@ def run_neb(
     energies = np.array([image.get_potential_energy() for image in images])
     for i, energy in enumerate(energies):
         print(f"Image {i:02d}: Energy = {energy:.6f} eV")
+
+    ts_index = np.argmax(energies)
+    print(f"Transition state is image {ts_index:02d} with energy {energies[ts_index]:.6f} eV")
+    ase.io.write(f"{filename}_ts.xyz", images[ts_index])
