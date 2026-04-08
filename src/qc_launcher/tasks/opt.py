@@ -103,8 +103,8 @@ def run_opt(
     ediff_criterion = float(config.get("ediff", 1e-6 * Hartree))
     fmax_criterion = float(config.get("fmax", 4.5e-4 * Hartree / Bohr))
     frms_criterion = float(config.get("frms", 3.0e-4 * Hartree / Bohr))
-    dmax_criterion = float(config.get("dmax", 1.8e-3))
-    drmx_criterion = float(config.get("drmx", 1.2e-3))
+    dmax_criterion = float(config.get("dmax", 1.8e-3 * Bohr))
+    drmx_criterion = float(config.get("drmx", 1.2e-3 * Bohr))
     max_steps = config.get("max_steps", 150)
 
     # set sella optimizer

@@ -14,23 +14,12 @@ gsm:
   # The direct pysisyphus integration currently supports DE-GSM only.
   # Provide a two-frame input file containing reactant and product.
   max_nodes: 9
-  # num_images is kept as an alias for max_nodes.
-  # num_images: 9
-  max_iterations: 64
+  max_cycles: 64
   fmax: 0.05
-  max_step: 0.05
+  frms: 0.05
+  dx: 0.05
   climb: true
-  reparameterize_interval: 3
-  coordinate_system: internal
-  # For cartesian runs, consider setting align: true.
-  # align: false
-  # Optional endpoint preoptimization before building the string.
-  # Uses ASE FIRE with the same gsm.fmax threshold.
-  # preopt: true
-  output:
-    workdir: scratch/gsm
-    # Keep pysisyphus internals only for debugging.
-    # keep_internal: true
-    # dump_optimizer: true
+  reparam_every: 3
+  coordinate_system: DLC
   trajectory: ???_gsm.extxyz
   ts_output: ???_ts.xyz

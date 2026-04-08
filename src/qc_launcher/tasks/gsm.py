@@ -81,11 +81,15 @@ def run_gsm(
     preopt = bool(config.get("preopt", False))
     coordinate = str(config.get("coordinate", "DLC")).lower()
     max_nodes = int(config.get("max_nodes", 7))
-    fmax = float(config.get("fmax", 0.05))
-    max_iterations = int(config.get("max_iterations", 64))
-    max_step = float(config.get("max_step", 0.1)) * Bohr
-    reparameterize_interval = int(config.get("reparameterize_interval", 3))
-    print_every = int(config.get("print_every", 1))
+    fmax = float(config.get("fmax", 2.5e-3 * Hartree / Bohr))
+    frms = float(config.get("frms", 1.7e-3 * Hartree / Bohr))
+    perp_thresh = float(config.get("perp_thresh", 0.05 * Hartree / Bohr))  # set in eV/Ang
+    max_cycles = int(config.get("max_cycles", 64))
+    dx = float(config.get("dx", 0.1 * Bohr))  # set in Angstrom
+    reparam_every = int(config.get("reparam_every", 2))
+    reparam_every_full = int(config.get("reparam_every_full", 3))
+    climb = bool(config.get("climb", True))
+    fix_ends = bool(config.get("fix_ends", True))
     stop_in_when_full = int(config.get("stop_in_when_full", -1))
     trajectory = config.get("trajectory", f"{filename}_gsm.xyz")
     ts_output = config.get("ts_output", f"{filename}_ts.xyz")
@@ -122,31 +126,24 @@ def run_gsm(
     reactant_geom.set_calculator(sisyphus_calc)
     product_geom.set_calculator(sisyphus_calc)
 
-    cos_kwargs: dict[str, Any] = {
-        "perp_thresh": fmax * Hartree / Bohr,
-        "max_nodes": max_nodes,
-        "climb": bool(config.get("climb", True)),
-        "reparam_every": reparameterize_interval,
-        "reparam_every_full": reparameterize_interval,
-    }
-    if "fix_ends" in config:
-        fix_ends = bool(config["fix_ends"])
-        cos_kwargs["fix_first"] = fix_ends
-        cos_kwargs["fix_last"] = fix_ends
-
     cos = GrowingString(
         [reactant_geom, product_geom],
         calc_getter=lambda: sisyphus_calc,
-        **cos_kwargs,
+        max_nodes=max_nodes,
+        perp_thresh=perp_thresh / (Hartree / Bohr),  # convert from eV/Ang to Hartree/Bohr
+        reparam_every=reparam_every,
+        reparam_every_full=reparam_every_full,
+        climb=climb,
+        fix_first=fix_ends,
+        fix_last=fix_ends,
     )
 
     optimizer = StringOptimizer(
         cos,
-        max_cycles=max_iterations,
-        max_step=max_step,
-        rms_force=fmax * Hartree / Bohr,
+        max_cycles=max_cycles,
+        max_step=dx / Bohr,  # convert from Ang to Bohr
+        rms_force=frms / (Hartree / Bohr),  # convert from eV/Ang to Hartree/Bohr
         stop_in_when_full=stop_in_when_full,
-        print_every=print_every,
         dump=False,
         dump_restart=False,
         prefix=f"{filename}_gsm",
