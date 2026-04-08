@@ -24,7 +24,9 @@ class QCLauncherPysisyphusCalculator(PysisyphusCalculator):
         coords3d = np.asarray(coords, dtype=float).reshape(-1, 3) * Bohr
         target = self.driver.atoms.copy()
         symbols = target.get_chemical_symbols()
-        if symbols != list(atoms):
+        symbols_lower = [s.lower() for s in symbols]
+        atoms_lower = [s.lower() for s in atoms]
+        if symbols_lower != atoms_lower:
             raise ValueError("Atom symbols from the geometry do not match those of the driver.")
         target.set_positions(coords3d)
         return target
@@ -54,7 +56,8 @@ def geom_to_ase_atoms(
     geom: Geometry, charge: int = 0, multiplicity: int = 1, energy: Optional[float] = None
 ) -> Atoms:
     pos = geom.coords3d * Bohr
-    symbols = list(geom.atoms)
+    symbols_lower = list(geom.atoms)
+    symbols = [s.capitalize() for s in symbols_lower]
     atoms = Atoms(symbols=symbols, positions=pos)
     if energy is None:
         energy = geom.energy * Hartree

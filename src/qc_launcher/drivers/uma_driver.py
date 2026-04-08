@@ -40,7 +40,7 @@ class UMADriver(BaseDriver):
         atom_refs_path = self.config.get(
             "atom_refs_path", os.path.join(os.path.dirname(model_path), "iso_atom_elem_refs.yaml")
         )
-        atom_refs = OmegaConf.load(atom_refs_path)
+        atom_refs = OmegaConf.load(atom_refs_path) if os.path.exists(atom_refs_path) else None
         device = self.config.get("device", None)
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
