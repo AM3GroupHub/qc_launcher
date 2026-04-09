@@ -123,7 +123,7 @@ class PySCFDriver(BaseDriver):
         xc = config.get("xc", "B3LYP")
         basis = config.get("basis", "def2-SVP")
         ecp = config.get("ecp", None)
-        nlc = config.get("nlc", None)
+        nlc = config.get("nlc", '')
         disp = config.get("disp", None)
         grids = config.get("grids", None)
         nlcgrids = config.get("nlcgrids", None)
