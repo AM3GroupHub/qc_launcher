@@ -5,6 +5,61 @@ import numpy as np
 import torch
 from ase import Atoms
 from ase.units import Hartree
+try:
+    from nvalchemiops.torch.neighbors import neighbor_list
+    NVALCHEMI_AVAILABLE = True
+except ImportError:
+    NVALCHEMI_AVAILABLE = False
+if NVALCHEMI_AVAILABLE:
+    def nv_get_neighborhood(
+        positions: np.ndarray,
+        cutoff: float,
+        pbc: Optional[Tuple[bool, bool, bool]] = None,
+        cell: Optional[np.ndarray] = None,
+        true_self_interaction=False,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        positions_tensor = torch.from_numpy(positions).float()  # [num_positions, 3]
+        cell_tensor = torch.from_numpy(cell).float() if cell is not None else None
+        pbc_tensor = torch.tensor(pbc, dtype=torch.bool) if pbc is not None else torch.zeros(3, dtype=torch.bool)
+        if torch.any(pbc_tensor):
+            edge_index_tensor, _, unit_shifts_tensor = neighbor_list(
+                positions=positions_tensor,
+                cutoff=cutoff,
+                cell=cell_tensor,
+                pbc=pbc_tensor,
+                return_neighbor_list=True,
+            )
+            shifts_tensor = torch.dot(unit_shifts_tensor, cell_tensor)  # [n_edges, 3]
+        else:
+            edge_index_tensor, _ = neighbor_list(
+                positions=positions_tensor,
+                cutoff=cutoff,
+                cell=None,
+                pbc=None,
+                return_neighbor_list=True,
+            )
+            unit_shifts_tensor = torch.zeros(edge_index_tensor.shape[1], 3, dtype=torch.int32)  # [n_edges, 3]
+            shifts_tensor = torch.zeros_like(unit_shifts_tensor, dtype=torch.float)  # [n_edges, 3]
+        # copy from original get_neighborhood
+        pbc_x = pbc[0]
+        pbc_y = pbc[1]
+        pbc_z = pbc[2]
+        identity = np.identity(3, dtype=float)
+        max_positions = np.max(np.absolute(positions)) + 1
+        # Extend cell in non-periodic directions
+        # For models with more than 5 layers, the multiplicative constant needs to be increased.
+        # temp_cell = np.copy(cell)
+        if not pbc_x:
+            cell[0, :] = max_positions * 5 * cutoff * identity[0, :]
+        if not pbc_y:
+            cell[1, :] = max_positions * 5 * cutoff * identity[1, :]
+        if not pbc_z:
+            cell[2, :] = max_positions * 5 * cutoff * identity[2, :]
+
+        return edge_index_tensor.numpy(), shifts_tensor.numpy(), unit_shifts_tensor.numpy(), cell
+    import mace.data.atomic_data
+    mace.data.atomic_data.get_neighborhood = nv_get_neighborhood
+
 from mace.calculators import mace_omol, mace_mp
 from mace.calculators import MACECalculator
 from pyscf import gto
