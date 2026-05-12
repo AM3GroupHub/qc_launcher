@@ -61,8 +61,7 @@ def run_gsm(
         ID=ID,
     )
     # build PES object
-    multiplicity = atoms_reactant.info.get("multiplicity", 1)
-    pes_obj = PES.from_options(lot=lot, ad_idx=0, multiplicity=multiplicity)
+    pes_obj = PES.from_options(lot=lot, ad_idx=0)
 
     # build topology
     nifty.printcool("Building topologies")
