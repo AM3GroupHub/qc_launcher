@@ -22,11 +22,13 @@ def run_neb(
     num_images = config.get("num_images", len(atoms_list) - 2)
     fmax = float(config.get("fmax", 0.05))
     climb = config.get("climb", False)
-    steps = config.get("steps", 1000)
+    max_opt_steps = config.get("max_opt_steps", None)
+    max_neb_steps = config.get("max_neb_steps", 1000)
     climb_after = config.get("climb_after", 0)
     spring_constant = float(config.get("spring_constant", 0.1))
     neb_method = config.get("neb_method", "improvedtangent")
-    preopt: bool = config.get("preopt", True)
+    fixed_reactant: bool = config.get("fixed_reactant", False)
+    fixed_product: bool = config.get("fixed_product", False)
     interpolate_method: str = config.get("interpolate_method", "idpp")
     trajectory = config.get("trajectory", f"{filename}_neb.traj")
 
@@ -50,16 +52,17 @@ def run_neb(
     calc = driver.to_ase_calc()
     
     # optimize terminal images first
-    if preopt and init_chain:
+    if not fixed_reactant:
         images[0].calc = calc
-        images[-1].calc = calc
         print("Optimizing initial image...")
-        with FIRE(images[0]) as opt:
+        with FIRE(images[0], maxstep=max_opt_steps) as opt:
             opt.run(fmax=fmax)
+    if not fixed_product:
+        images[-1].calc = calc
         print("Optimizing final image...")
-        with FIRE(images[-1]) as opt:
+        with FIRE(images[-1], maxstep=max_opt_steps) as opt:
             opt.run(fmax=fmax)
-    
+
     # set up NEB and interpolate if needed
     neb = NEB(
         images=images,
@@ -77,9 +80,9 @@ def run_neb(
         image.calc = calc
 
     # set up optimizer and run NEB
-    opt = FIRE(neb, trajectory=trajectory)
+    opt = FIRE(neb, trajectory=trajectory, maxstep=max_opt_steps)
     # stage 1: regular NEB
-    stage1_steps = climb_after if climb else steps
+    stage1_steps = climb_after if climb else max_neb_steps
     if stage1_steps > 0:
         print("Starting NEB ...")
         converged = opt.run(fmax=fmax, steps=stage1_steps)
@@ -87,7 +90,7 @@ def run_neb(
     if climb:
         print("Starting CI-NEB ...")
         neb.climb = True
-        converged = opt.run(fmax=fmax, steps=steps-stage1_steps)
+        converged = opt.run(fmax=fmax, steps=max_neb_steps-stage1_steps)
     images = neb.images
     
     # chekc convergence

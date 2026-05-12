@@ -1,6 +1,5 @@
 import os
 
-import numpy as np
 import ase.io
 from ase import Atoms
 
@@ -25,17 +24,17 @@ def run_gsm(
     # read config
     optimizer_method = config.get("optimizer_method", "eigenvector_follow")
     line_search = config.get("line_search", "NoLineSearch")
-    only_climb = config.get("only_climb", True)
-    step_size_cap = config.get("step_size_cap", 0.1)
+    climb = config.get("climb", True)
+    dmax = config.get("dmax", 0.1)
     coordinate_type = config.get("coordinate_type", "TRIC")
     gsm_type = config.get("gsm_type", "DE_GSM")
     num_nodes = config.get("num_nodes", 11)
     add_node_tol = config.get("add_node_tol", 0.1)
     conv_tol = float(config.get("conv_tol", 5e-4))
-    conv_Ediff = float(config.get("conv_Ediff", 100.0))
-    conv_gmax = float(config.get("conv_gmax", 100.0))
+    ediff = float(config.get("ediff", 100.0))
+    fmax = float(config.get("fmax", 100.0))
     ID = config.get("ID", 0)
-    max_gsm_iterations = config.get("max_gsm_iterations", 100)
+    max_gsm_steps = config.get("max_gsm_steps", 100)
     max_opt_steps = config.get("max_opt_steps", 3)
     fixed_reactant = config.get("fixed_reactant", False)
     fixed_product = config.get("fixed_product", False)
@@ -62,7 +61,7 @@ def run_gsm(
         ID=ID,
     )
     # build PES object
-    multiplicity = atoms_reactant.info.get("multiplicity", 1)  # don't know why it is needed
+    multiplicity = atoms_reactant.info.get("multiplicity", 1)
     pes_obj = PES.from_options(lot=lot, ad_idx=0, multiplicity=multiplicity)
 
     # build topology
@@ -143,11 +142,11 @@ def run_gsm(
     opt_options = dict(
         print_level=1,
         Linesearch=line_search,
-        update_hess_in_bg=not (only_climb or optimizer_method == "lbfgs"),
-        conv_Ediff=conv_Ediff,
-        conv_gmax=conv_gmax,
-        DMAX=step_size_cap,
-        opt_climb=only_climb,
+        update_hess_in_bg=not (climb or optimizer_method == "lbfgs"),
+        conv_Ediff=ediff,
+        conv_gmax=fmax,
+        DMAX=dmax,
+        opt_climb=climb,
     )
     if optimizer_method == "eigenvector_follow":
         optimizer_object = eigenvector_follow.from_options(**opt_options)
@@ -163,8 +162,8 @@ def run_gsm(
         product=molecule_product,
         nnodes=num_nodes,
         CONV_TOL=conv_tol,
-        CONV_gmax=conv_gmax,
-        CONV_Ediff=conv_Ediff,
+        CONV_gmax=fmax,
+        CONV_Ediff=ediff,
         ADD_NODE_TOL=add_node_tol,
         growth_direction=0,
         optimizer=optimizer_object,
@@ -195,19 +194,17 @@ def run_gsm(
         )
     
     # set rtype
-    rtype = 1 if only_climb else 2
+    rtype = 1 if climb else 2
 
     # run GSM
     nifty.printcool("Running GSM")
-    gsm.go_gsm(max_iters=max_gsm_iterations, opt_steps=max_opt_steps, rtype=rtype)
+    gsm.go_gsm(max_iters=max_gsm_steps, opt_steps=max_opt_steps, rtype=rtype)
 
     # write the results into an xyz file
     string_ase, ts_ase = gsm_to_ase_atoms(gsm)
     ase.io.write(f"{filename}_GSM.xyz", string_ase)
     ase.io.write(f"{filename}_TS.xyz", ts_ase)
 
-    # post process
-    post_processing(gsm, have_TS=True)
 
 
 def gsm_to_ase_atoms(gsm: DE_GSM):
@@ -223,44 +220,3 @@ def gsm_to_ase_atoms(gsm: DE_GSM):
     ts_atoms = Atoms(symbols=[x[0] for x in ts_geom], positions=[x[1:4] for x in ts_geom])
 
     return frames, ts_atoms
-
-
-def post_processing(gsm, analyze_ICs=False, have_TS=True):
-    ICs = []
-    ICs.append(gsm.nodes[0].primitive_internal_coordinates)
-
-    # TS energy
-    if have_TS:
-        minnodeR = np.argmin(gsm.energies[:gsm.TSnode])
-        TSenergy = gsm.energies[gsm.TSnode] - gsm.energies[minnodeR]
-        print(" TS energy: %5.4f" % TSenergy)
-        print(" absolute energy TS node %5.4f" % gsm.nodes[gsm.TSnode].energy)
-        minnodeP = gsm.TSnode + np.argmin(gsm.energies[gsm.TSnode:])
-        print(" min reactant node: %i min product node %i TS node is %i" % (minnodeR, minnodeP, gsm.TSnode))
-
-        # ICs
-        ICs.append(gsm.nodes[minnodeR].primitive_internal_values)
-        ICs.append(gsm.nodes[gsm.TSnode].primitive_internal_values)
-        ICs.append(gsm.nodes[minnodeP].primitive_internal_values)
-        with open('IC_data_{:04d}.txt'.format(gsm.ID), 'w') as f:
-            f.write("Internals \t minnodeR: {} \t TSnode: {} \t minnodeP: {}\n".format(minnodeR, gsm.TSnode, minnodeP))
-            for x in zip(*ICs):
-                f.write("{0}\t{1}\t{2}\t{3}\n".format(*x))
-
-    else:
-        minnodeR = 0
-        minnodeP = gsm.nR
-        print(" absolute energy end node %5.4f" % gsm.nodes[gsm.nR].energy)
-        print(" difference energy end node %5.4f" % gsm.nodes[gsm.nR].difference_energy)
-        # ICs
-        ICs.append(gsm.nodes[minnodeR].primitive_internal_values)
-        ICs.append(gsm.nodes[minnodeP].primitive_internal_values)
-        with open('IC_data_{}.txt'.format(gsm.ID), 'w') as f:
-            f.write("Internals \t Beginning: {} \t End: {}".format(minnodeR, gsm.TSnode, minnodeP))
-            for x in zip(*ICs):
-                f.write("{0}\t{1}\t{2}\n".format(*x))
-
-    # Delta E
-    deltaE = gsm.energies[minnodeP] - gsm.energies[minnodeR]
-    print(" Delta E is %5.4f" % deltaE)
-
