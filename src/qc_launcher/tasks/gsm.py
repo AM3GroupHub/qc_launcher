@@ -1,8 +1,8 @@
 import os
+import shutil
 
 import ase.io
 from ase import Atoms
-
 from pygsm.level_of_theories.ase import ASELoT
 from pygsm.potential_energy_surfaces import PES
 from pygsm.growing_string_methods import DE_GSM
@@ -38,6 +38,7 @@ def run_gsm(
     max_opt_steps = config.get("max_opt_steps", 3)
     fixed_reactant = config.get("fixed_reactant", False)
     fixed_product = config.get("fixed_product", False)
+    clear_scratch = config.get("clear_scratch", False)
 
     # read atoms
     if gsm_type == "DE_GSM":
@@ -200,10 +201,24 @@ def run_gsm(
     gsm.go_gsm(max_iters=max_gsm_steps, opt_steps=max_opt_steps, rtype=rtype)
 
     # write the results into an xyz file
+    # add charge and multiplicity info to the frames
     string_ase, ts_ase = gsm_to_ase_atoms(gsm)
+    charge = atoms_reactant.info.get("charge", 0)
+    multiplicity = atoms_reactant.info.get("multiplicity", 1)
+    for frame in string_ase:
+        frame.info["charge"] = charge
+        frame.info["multiplicity"] = multiplicity
+    ts_ase.info["charge"] = charge
+    ts_ase.info["multiplicity"] = multiplicity
+    # write to xyz
     ase.io.write(f"{filename}_GSM.xyz", string_ase)
     ase.io.write(f"{filename}_TS.xyz", ts_ase)
 
+    # clear scratch
+    if clear_scratch:
+        scratch_dir = os.path.join(os.getcwd(), "scratch")
+        if os.path.exists(scratch_dir):
+            shutil.rmtree(scratch_dir)
 
 
 def gsm_to_ase_atoms(gsm: DE_GSM):
