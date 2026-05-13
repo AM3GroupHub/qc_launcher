@@ -1,3 +1,4 @@
+import warnings
 from typing import Optional, List, Tuple
 from types import SimpleNamespace
 
@@ -219,14 +220,14 @@ class TBLiteDriver(BaseDriver):
             if solv_method in {"alpb", "gbsa"}:
                 solvent = solvation.get("solvent", "water")
                 solution_state = solvation.get("solution_state", "gsolv")
-                solv_args = (solv_method, (solvent, solution_state))
+                solv_args = (solv_method, solvent, solution_state)
             elif solv_method == "cpcm":
                 epsilon = solvation.get("epsilon", 78.3553)
                 solv_args = (solv_method, epsilon)
             elif solv_method in {"gbe", "gb"}:
                 epsilon = solvation.get("epsilon", 78.3553)
                 born_kernel = solvation.get("born_kernel", "still")
-                solv_args = (solv_method, (epsilon, born_kernel))
+                solv_args = (solv_method, epsilon, born_kernel)
             else:
                 raise ValueError(f"Unsupported solvation method: {solv_method}")
         else:
