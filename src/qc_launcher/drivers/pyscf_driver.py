@@ -293,17 +293,17 @@ class PySCFDriver(BaseDriver):
             return self.method.e_tot * Hartree  # convert from Hartree to eV
         
         # update molecule geometry
-        self.method.mol.set_geom_(self.atoms.get_positions(), unit="Angstrom")
+        mol = self.method.mol.set_geom_(self.atoms.get_positions(), unit="Angstrom", inplace=False)
+        self.method.reset(mol)  # reset method with new molecule geometry
         # if use_cache, pass cached density matrix to speed up convergence
         dm0 = self._dm_cache if use_cache else None
         energy = self.method.kernel(dm0=dm0)
         converged = self.method.converged
         if not converged and self.retry_soscf:
             # try SOSCF if not converged
-            mo_init = self.method.mo_coeff
-            mocc_init = self.method.mo_occ
             newton_method = self.method.newton()
-            energy = newton_method.kernel(mo_init, mocc_init)
+            newton_method.reset(mol)
+            energy = newton_method.kernel()
             converged = newton_method.converged
             if converged:
                 self.log("SOSCF converged")
