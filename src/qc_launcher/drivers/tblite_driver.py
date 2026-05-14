@@ -289,14 +289,14 @@ class TBLiteDriver(BaseDriver):
             if solv_method in {"alpb", "gbsa"}:
                 solvent = solvation.get("solvent", "water")
                 solution_state = solvation.get("solution_state", "gsolv")
-                xtb.add(f"{solv_method}-solvation", (solvent, solution_state))
+                xtb.add(f"{solv_method}-solvation", solvent, solution_state)
             elif solv_method == "cpcm":
                 epsilon = solvation.get("epsilon", 78.3553)
                 xtb.add("cpcm-solvation", epsilon)
             elif solv_method in {"gbe", "gb"}:
                 epsilon = solvation.get("epsilon", 78.3553)
                 born_kernel = solvation.get("born_kernel", "still")
-                xtb.add(f"{solv_method}-solvation", (epsilon, born_kernel))
+                xtb.add(f"{solv_method}-solvation", epsilon, born_kernel)
             else:
                 raise ValueError(f"Unsupported solvation method: {solv_method}")
         return xtb
