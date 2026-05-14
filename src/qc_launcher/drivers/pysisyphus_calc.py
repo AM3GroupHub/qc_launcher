@@ -19,15 +19,15 @@ class QCSisyphusCalc(Calculator):
     ) -> None:
         # load driver
         driver_name = driver.pop("name")
-        driver = get_driver(
+        driver_obj = get_driver(
             name=driver_name, atoms=None, config=driver, verbose=False,
         ) 
         # read charge and multiplicity from driver.atoms.info, default to 0 and 1 if not present
-        charge = driver.atoms.info.get("charge", 0) if charge is None else charge
-        mult = driver.atoms.info.get("multiplicity", 1) if mult is None else mult
+        charge = driver_obj.atoms.info.get("charge", 0) if charge is None else charge
+        mult = driver_obj.atoms.info.get("multiplicity", 1) if mult is None else mult
         # initialize the parent Calculator class with charge and multiplicity
         super().__init__(charge=charge, mult=mult, **kwargs)
-        self.driver = driver
+        self.driver = driver_obj
 
     def prepare_atoms(self, atoms: List[str], coords: np.ndarray, **prepare_kwargs) -> Atoms:
         symbols = [symbol.capitalize() for symbol in atoms]  # ensure symbols are capitalized
@@ -72,6 +72,5 @@ class QCSisyphusCalc(Calculator):
         ase_atoms = self.prepare_atoms(atoms, coords, **prepare_kwargs)
         hessian = self.driver.compute_hessian(atoms=ase_atoms, use_cache=True, hess_format="ase")
         hessian *= Bohr**2 / Hartree  # convert from eV/Ang^2 to Eh/Bohr^2
-        results = {}
         results["hessian"] = hessian
         return results
