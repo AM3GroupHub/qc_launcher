@@ -8,7 +8,7 @@ from ase.calculators.calculator import Calculator
 
 
 class BaseDriver(ABC):    
-    def __init__(self, atoms: Atoms, config: dict, verbose: bool = True):
+    def __init__(self, atoms: Optional[Atoms], config: dict, verbose: bool = True):
         """
         Initialize the base driver.
         
@@ -16,7 +16,7 @@ class BaseDriver(ABC):
             atoms: ASE Atoms object.
             config: Configuration dictionary containing driver parameters.
         """
-        self.atoms = atoms
+        self.atoms: Optional[Atoms] = atoms
         self.config = config
         self.verbose = verbose
         self._hessian_cache = {}
@@ -37,9 +37,12 @@ class BaseDriver(ABC):
         Returns:
             True if positions were updated, else False if positions are the same and no update was needed.
         """
-        # if atoms is None, nothing to update
+        if self.atoms is None:
+            assert atoms is not None, "Current atoms is None, new atoms cannot be None."
+            self.atoms = atoms
+            return True
         if atoms is None:
-            return False
+            return False  # new atoms is None, no update needed
         # check if atomic numbers have changed
         new_numbers = atoms.get_atomic_numbers()
         curr_numbers = self.atoms.get_atomic_numbers()

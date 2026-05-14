@@ -1,4 +1,3 @@
-import warnings
 from typing import Optional, List, Tuple
 from types import SimpleNamespace
 
@@ -389,6 +388,8 @@ class TBLiteDriver(BaseDriver):
                 grad_minus = res_minus["gradient"]
                 hessian[i, :, j, :] = (grad_plus - grad_minus) / (2 * eps / Bohr)
                 self.atoms.positions[i, j] += eps
+        # symmetrize hessian
+        hessian = (hessian + hessian.transpose(1, 0, 3, 2)) / 2
         return hessian
 
     def dump_extra_results(self) -> dict:

@@ -101,7 +101,7 @@ class PySCFDriver(BaseDriver):
         super().__init__(atoms=atoms, config=config, **kwargs)
         xc: str = self.config.get("xc", "B3LYP")
         self.is_3c = xc.lower().endswith("3c")
-        self.method = self.build_method()
+        self.method = None if atoms is None else self.build_method(atoms=atoms)
         self.gradient_method = None
         self.hessian_method = None
         self._dm_cache = None  # cache for density matrix
@@ -284,6 +284,10 @@ class PySCFDriver(BaseDriver):
         run PySCF kernel to compute energy, with optional caching of density matrix for faster convergence in subsequent calls.
         """
         updated = self.update_atoms(atoms)
+        # lazy build method
+        if self.method is None:
+            self.method = self.build_method()
+        
         if not updated and self.method.converged:
             # positions are the same and SCF already converged, no need to rerun
             return self.method.e_tot * Hartree  # convert from Hartree to eV
