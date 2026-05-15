@@ -102,8 +102,6 @@ class PySCFDriver(BaseDriver):
         xc: str = self.config.get("xc", "B3LYP")
         self.is_3c = xc.lower().endswith("3c")
         self.method = None if atoms is None else self.build_method(atoms=atoms)
-        self.gradient_method = None
-        self.hessian_method = None
         self._dm_cache = None  # cache for density matrix
         self.retry_soscf = self.config.get("retry_soscf", False)
         self._extra_results = {}  # store extra results such as energy components, orbital energies, etc.
@@ -290,7 +288,7 @@ class PySCFDriver(BaseDriver):
         
         if not updated and self.method.converged:
             # positions are the same and SCF already converged, no need to rerun
-            return self.method.e_tot * Hartree  # convert from Hartree to eV
+            return self.method.e_tot
         
         # update molecule geometry
         mol = self.method.mol.set_geom_(self.atoms.get_positions(), unit="Angstrom", inplace=False)
@@ -315,9 +313,8 @@ class PySCFDriver(BaseDriver):
         return energy  # in Hartree
 
     def to_ase_calc(self):
-        if self.gradient_method is None:
-            self.gradient_method = self.build_gradient_method()
-        g_scanner = self.gradient_method.as_scanner()
+        gradient_method = self.build_gradient_method()
+        g_scanner = gradient_method.as_scanner()
         return PySCFCalculator(
             method=self.method, g_scanner=g_scanner,
             max_unconverged_steps=self.config.get("max_unconverged_steps", None),
@@ -382,9 +379,8 @@ class PySCFDriver(BaseDriver):
 
     def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
         self.run_kernel(atoms=atoms, use_cache=True)
-        if self.gradient_method is None:
-            self.gradient_method = self.build_gradient_method()
-        grad = self.gradient_method.kernel()
+        gradient_method = self.build_gradient_method()
+        grad = gradient_method.kernel()
         return -grad, "Eh/Bohr"
 
     def _compute_hessian_impl(
@@ -399,16 +395,14 @@ class PySCFDriver(BaseDriver):
             else:
                 from pyscf.tools import finite_diff
             finite_diff_eps = self.config.get("finite_diff_eps", 5e-3)
-            if self.gradient_method is None:
-                self.gradient_method = self.build_gradient_method()
-            finite_diff_h = finite_diff.Hessian(self.gradient_method)
+            gradient_method = self.build_gradient_method()
+            finite_diff_h = finite_diff.Hessian(gradient_method)
             finite_diff_h.displacement = finite_diff_eps / Bohr  # convert from Angstrom to Bohr
             hessian = finite_diff_h.kernel()
         else:
             self.run_kernel(atoms=atoms, use_cache=True)
-            if self.hessian_method is None:
-                self.hessian_method = self.build_hessian_method()
-            hessian = self.hessian_method.kernel()
+            hessian_method = self.build_hessian_method()
+            hessian = hessian_method.kernel()
         
         return hessian
     
