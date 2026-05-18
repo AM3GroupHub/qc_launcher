@@ -1,9 +1,22 @@
+from __future__ import annotations
+
 from typing import List
 
 import numpy as np
 from ase import Atoms
 from ase.units import Bohr, Hartree
-from pysisyphus.calculators.Calculator import Calculator
+
+from qc_launcher.utils.optional import is_missing_package, missing_optional_dependency
+
+try:
+    from pysisyphus.calculators.Calculator import Calculator
+except ModuleNotFoundError as exc:
+    if is_missing_package(exc, "pysisyphus"):
+        raise missing_optional_dependency(
+            "pysisyphus calculator bridge",
+            "pysisyphus",
+        ) from exc
+    raise
 
 from .driver_factory import get_driver
 
@@ -18,13 +31,15 @@ class QCSisyphusCalc(Calculator):
         **kwargs
     ) -> None:
         # load driver
-        driver_name = driver.pop("name")
+        driver_config = dict(driver)
+        driver_name = driver_config.pop("name")
         driver_obj = get_driver(
-            name=driver_name, atoms=None, config=driver, verbose=False,
+            name=driver_name, atoms=None, config=driver_config, verbose=False,
         ) 
         # read charge and multiplicity from driver.atoms.info, default to 0 and 1 if not present
-        charge = driver_obj.atoms.info.get("charge", 0) if charge is None else charge
-        mult = driver_obj.atoms.info.get("multiplicity", 1) if mult is None else mult
+        driver_info = {} if driver_obj.atoms is None else driver_obj.atoms.info
+        charge = driver_info.get("charge", 0) if charge is None else charge
+        mult = driver_info.get("multiplicity", 1) if mult is None else mult
         # initialize the parent Calculator class with charge and multiplicity
         super().__init__(charge=charge, mult=mult, **kwargs)
         self.driver = driver_obj

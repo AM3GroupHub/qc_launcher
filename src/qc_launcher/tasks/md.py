@@ -39,7 +39,7 @@ def run_md(
     ensemble = config.get("ensemble", "NVT")
     minimize = config.get("minimize", True)
     optimizer = config.get("optimizer", "FIRE")
-    opt_kwargs = config.get("opt_kwargs", {})
+    opt_kwargs = config.get("opt_kwargs") or {}
     fmax = float(config.get("fmax", 0.05))  # eV/Å
     max_min_steps = int(config.get("max_min_steps", 500))
     min_trajectory = config.get("min_trajectory", f"{filename}_min.traj")
@@ -51,6 +51,7 @@ def run_md(
     logfile = config.get("logfile", "-")  # "-" means print to stdout
     append_trajectory = config.get("append_trajectory", False)
     init_velocities = config.get("init_velocities", True)
+    log_stress = bool(config.get("log_stress", False))
     seed = config.get("seed", 42)
     resume = config.get("resume", False)
     rng = np.random.default_rng(seed=seed)  # For reproducibility
@@ -211,7 +212,12 @@ def run_md(
     print(f"Timestep: {timestep} fs")
     print(f"Total simulation time: {nsteps * timestep / 1000:.2f} ps")
 
-    md_logger = MDLogger(dyn=dyn, atoms=atoms, logfile=logfile, stress=True)
+    md_logger = MDLogger(
+        dyn=dyn,
+        atoms=atoms,
+        logfile=logfile,
+        stress=log_stress,
+    )
     dyn.attach(md_logger, interval=loginterval)
     dyn.run(nsteps)
     

@@ -1,18 +1,51 @@
+from __future__ import annotations
+
 import os
 import shutil
+from typing import Any
 
 import ase.io
 from ase import Atoms
-from pygsm.level_of_theories.ase import ASELoT
-from pygsm.potential_energy_surfaces import PES
-from pygsm.growing_string_methods import DE_GSM
-from pygsm.optimizers import eigenvector_follow, lbfgs
-from pygsm.utilities import nifty
-from pygsm.utilities.elements import ElementData
-from pygsm.coordinate_systems import Topology, PrimitiveInternalCoordinates, DelocalizedInternalCoordinates
-from pygsm.molecule import Molecule
 
+from qc_launcher.utils.optional import is_missing_package, missing_optional_dependency
 from qc_launcher.drivers.base_driver import BaseDriver
+
+
+def import_pygsm() -> dict[str, Any]:
+    try:
+        from pygsm.coordinate_systems import (
+            DelocalizedInternalCoordinates,
+            PrimitiveInternalCoordinates,
+            Topology,
+        )
+        from pygsm.growing_string_methods import DE_GSM
+        from pygsm.level_of_theories.ase import ASELoT
+        from pygsm.molecule import Molecule
+        from pygsm.optimizers import eigenvector_follow, lbfgs
+        from pygsm.potential_energy_surfaces import PES
+        from pygsm.utilities import nifty
+        from pygsm.utilities.elements import ElementData
+    except ModuleNotFoundError as exc:
+        if is_missing_package(exc, "pygsm"):
+            raise missing_optional_dependency(
+                "GSM support",
+                "gsm",
+                package_name="pygsm",
+            ) from exc
+        raise
+    return {
+        "ASELoT": ASELoT,
+        "PES": PES,
+        "DE_GSM": DE_GSM,
+        "eigenvector_follow": eigenvector_follow,
+        "lbfgs": lbfgs,
+        "nifty": nifty,
+        "ElementData": ElementData,
+        "Topology": Topology,
+        "PrimitiveInternalCoordinates": PrimitiveInternalCoordinates,
+        "DelocalizedInternalCoordinates": DelocalizedInternalCoordinates,
+        "Molecule": Molecule,
+    }
 
 
 def run_gsm(
@@ -21,6 +54,19 @@ def run_gsm(
     atoms_list: list,
     filename: str = "molecule",
 ) -> None:
+    pygsm_api = import_pygsm()
+    ASELoT = pygsm_api["ASELoT"]
+    PES = pygsm_api["PES"]
+    DE_GSM = pygsm_api["DE_GSM"]
+    eigenvector_follow = pygsm_api["eigenvector_follow"]
+    lbfgs = pygsm_api["lbfgs"]
+    nifty = pygsm_api["nifty"]
+    ElementData = pygsm_api["ElementData"]
+    Topology = pygsm_api["Topology"]
+    PrimitiveInternalCoordinates = pygsm_api["PrimitiveInternalCoordinates"]
+    DelocalizedInternalCoordinates = pygsm_api["DelocalizedInternalCoordinates"]
+    Molecule = pygsm_api["Molecule"]
+
     # read config
     optimizer_method = config.get("optimizer_method", "eigenvector_follow")
     line_search = config.get("line_search", "NoLineSearch")
@@ -28,13 +74,13 @@ def run_gsm(
     dmax = config.get("dmax", 0.1)
     coordinate_type = config.get("coordinate_type", "TRIC")
     gsm_type = config.get("gsm_type", "DE_GSM")
-    num_nodes = config.get("num_nodes", 11)
+    num_nodes = int(config.get("num_nodes", 11))
     add_node_tol = config.get("add_node_tol", 0.1)
     conv_tol = float(config.get("conv_tol", 5e-4))
     ediff = float(config.get("ediff", 100.0))
     fmax = float(config.get("fmax", 100.0))
     ID = config.get("ID", 0)
-    max_gsm_steps = config.get("max_gsm_steps", 100)
+    max_gsm_steps = int(config.get("max_gsm_steps", 100))
     max_opt_steps = config.get("max_opt_steps", 3)
     fixed_reactant = config.get("fixed_reactant", False)
     fixed_product = config.get("fixed_product", False)
@@ -221,7 +267,7 @@ def run_gsm(
             shutil.rmtree(scratch_dir)
 
 
-def gsm_to_ase_atoms(gsm: DE_GSM):
+def gsm_to_ase_atoms(gsm: Any):
     # string
     frames = []
     for energy, geom in zip(gsm.energies, gsm.geometries):

@@ -1,6 +1,6 @@
-inputfile: ???.xyz
-charge: null
-multiplicity: null
+inputfile: reaction_pair.xyz
+charge: 0
+multiplicity: 1
 
 driver:
   # Any qc_launcher driver that can provide energies and forces can be used.
@@ -11,15 +11,16 @@ driver:
   with_gpu: false
 
 gsm:
-  # The direct pysisyphus integration currently supports DE-GSM only.
-  # Provide a two-frame input file containing reactant and product.
-  max_nodes: 9
-  max_cycles: 64
-  fmax: 0.05
-  frms: 0.05
-  dx: 0.05
+  gsm_type: DE_GSM
+  num_nodes: 9
+  coordinate_type: DLC
+  optimizer_method: eigenvector_follow
+  line_search: NoLineSearch
   climb: true
-  reparam_every: 3
-  coordinate_system: DLC
-  trajectory: ???_gsm.extxyz
-  ts_output: ???_ts.xyz
+  fmax: 0.05
+  dmax: 0.1
+  max_gsm_steps: 64
+  max_opt_steps: 3
+  fixed_reactant: false
+  fixed_product: false
+  clear_scratch: false
