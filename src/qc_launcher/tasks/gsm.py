@@ -220,8 +220,8 @@ def run_gsm(
     ts_ase.info["charge"] = charge
     ts_ase.info["multiplicity"] = multiplicity
     # write to xyz
-    ase.io.write(f"{filename}_GSM.xyz", string_ase)
-    ase.io.write(f"{filename}_TS.xyz", ts_ase)
+    ase.io.write(f"{filename}_gsm.xyz", string_ase)
+    ase.io.write(f"{filename}_ts.xyz", ts_ase)
 
     # clear scratch
     if clear_scratch:

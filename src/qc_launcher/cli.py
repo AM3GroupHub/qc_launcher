@@ -128,51 +128,26 @@ def launch_qc(config_path: str) -> None:
     atoms, filename = load_single_structure(config)
     driver = build_driver(config, atoms)
 
-    results: dict[str, Any] = {}
-
     opt_config = normalize_task_config(config, "opt")
     if opt_config is not None:
         run_opt = load_opt_runner()
-        opt_results = run_opt(driver, opt_config, filename)
-        results.update(opt_results)
+        run_opt(driver, opt_config, filename)
 
-    sp_results = run_sp(driver)
-    results.update(sp_results)
+    run_sp(driver)
 
     if "forces" in config:
         if config["forces"] is not True:
             raise ValueError("`forces` must be set to `true` to compute gradients.")
-        grad_results = run_grad(driver)
-        results.update(grad_results)
+        run_grad(driver)
 
     freq_config = normalize_task_config(config, "freq")
     if freq_config is not None:
-        freq_results = run_freq(driver, freq_config, filename)
-        results.update(freq_results)
+        run_freq(driver, freq_config, filename)
 
     irc_config = normalize_task_config(config, "irc")
     if irc_config is not None:
         run_irc = load_irc_runner()
-        irc_results = run_irc(driver, irc_config, filename)
-        results.update(irc_results)
-
-    if config.get("save_json", False):
-        from qc_launcher.utils.utils import to_jsonable
-
-        json_output = config.get("json_output", f"{filename}_db.json")
-        system = {
-            "symbols": atoms.get_chemical_symbols(),
-            "positions": atoms.get_positions().tolist(),
-            "charge": atoms.info.get("charge", 0),
-            "multiplicity": atoms.info.get("multiplicity", 1),
-        }
-        json_dict = {
-            "system": system,
-            "config": config,
-            "results": results,
-        }
-        with open(json_output, "w", encoding="utf-8") as handle:
-            json.dump(to_jsonable(json_dict), handle, indent=4)
+        run_irc(driver, irc_config, filename)
 
 
 def launch_md(config_path: str) -> None:
@@ -267,9 +242,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> None:
     argv_list = list(sys.argv[1:] if argv is None else argv)
 
     parser = build_parser()
     args = parser.parse_args(argv_list)
-    return int(args.handler(args))
+    args.handler(args)

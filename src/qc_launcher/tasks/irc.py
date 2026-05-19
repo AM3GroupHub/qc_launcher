@@ -12,7 +12,7 @@ def run_irc(
     driver: BaseDriver,
     config: dict,
     filename: str = "molecule",
-) -> dict:
+) -> None:
     # record the start time
     start_time = time.time()
     
@@ -76,12 +76,4 @@ def run_irc(
 
     end_time = time.time()
     print(f"IRC completed in {end_time - start_time:.2f} seconds.")
-    
-    traj_pos = np.stack([atoms.get_positions() for atoms in irc_atoms_traj])
-    traj_energies = np.array([atoms.get_potential_energy() for atoms in irc_atoms_traj])
-    traj_forces = np.stack([atoms.get_forces() for atoms in irc_atoms_traj])
-    return {"irc_traj": {
-        "positions": traj_pos,
-        "energies": traj_energies,
-        "forces": traj_forces
-    }}
+

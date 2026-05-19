@@ -17,7 +17,7 @@ def run_freq(
     driver: BaseDriver,
     config: dict,
     filename: str = "molecule",
-) -> dict:
+) -> None:
     if "symm_geom_tol" in config:
         symm.geom.TOLERANCE = config["symm_geom_tol"] / Bohr  # convert from Angstrom to Bohr
 
@@ -117,5 +117,3 @@ def run_freq(
     )
     end_time = time.time()
     print(f"Vibrational analysis completed in {end_time - start_time:.2f} seconds.")
-
-    return results

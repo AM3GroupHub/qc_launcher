@@ -69,7 +69,7 @@ def run_opt(
     driver: BaseDriver,
     config: dict,
     filename: str = "molecule",
-) -> dict:
+) -> None:
     """
     Run geometry optimization using the Sella optimizer with the specified driver and configuration.
     """
@@ -161,20 +161,3 @@ def run_opt(
     print(f"Optimization completed in {end_time - start_time:.2f} seconds.")
 
     driver.update_atoms(atoms)
-
-    # store trajectory to results
-    atoms_traj = ase.io.Trajectory(trajectory)
-    traj_pos, traj_energies, traj_forces = [], [], []
-    for frame in atoms_traj:
-        traj_pos.append(frame.get_positions())
-        traj_energies.append(frame.get_potential_energy())
-        traj_forces.append(frame.get_forces())
-    traj_pos = np.stack(traj_pos)
-    traj_energies = np.array(traj_energies)
-    traj_forces = np.stack(traj_forces)
-    
-    return {"opt_traj": {
-        "positions": (traj_pos, "Ang"),
-        "energies": (traj_energies, "eV"),
-        "forces": (traj_forces, "eV/Ang"),
-    }}
