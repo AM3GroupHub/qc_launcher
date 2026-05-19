@@ -11,41 +11,18 @@ from qc_launcher.utils.optional import is_missing_package, missing_optional_depe
 from qc_launcher.drivers.base_driver import BaseDriver
 
 
-def import_pygsm() -> dict[str, Any]:
-    try:
-        from pygsm.coordinate_systems import (
-            DelocalizedInternalCoordinates,
-            PrimitiveInternalCoordinates,
-            Topology,
-        )
-        from pygsm.growing_string_methods import DE_GSM
-        from pygsm.level_of_theories.ase import ASELoT
-        from pygsm.molecule import Molecule
-        from pygsm.optimizers import eigenvector_follow, lbfgs
-        from pygsm.potential_energy_surfaces import PES
-        from pygsm.utilities import nifty
-        from pygsm.utilities.elements import ElementData
-    except ModuleNotFoundError as exc:
-        if is_missing_package(exc, "pygsm"):
-            raise missing_optional_dependency(
-                "GSM support",
-                "gsm",
-                package_name="pygsm",
-            ) from exc
-        raise
-    return {
-        "ASELoT": ASELoT,
-        "PES": PES,
-        "DE_GSM": DE_GSM,
-        "eigenvector_follow": eigenvector_follow,
-        "lbfgs": lbfgs,
-        "nifty": nifty,
-        "ElementData": ElementData,
-        "Topology": Topology,
-        "PrimitiveInternalCoordinates": PrimitiveInternalCoordinates,
-        "DelocalizedInternalCoordinates": DelocalizedInternalCoordinates,
-        "Molecule": Molecule,
-    }
+from pygsm.coordinate_systems import (
+    DelocalizedInternalCoordinates,
+    PrimitiveInternalCoordinates,
+    Topology,
+)
+from pygsm.growing_string_methods import DE_GSM
+from pygsm.level_of_theories.ase import ASELoT
+from pygsm.molecule import Molecule
+from pygsm.optimizers import eigenvector_follow, lbfgs
+from pygsm.potential_energy_surfaces import PES
+from pygsm.utilities import nifty
+from pygsm.utilities.elements import ElementData
 
 
 def run_gsm(
@@ -54,18 +31,6 @@ def run_gsm(
     atoms_list: list,
     filename: str = "molecule",
 ) -> None:
-    pygsm_api = import_pygsm()
-    ASELoT = pygsm_api["ASELoT"]
-    PES = pygsm_api["PES"]
-    DE_GSM = pygsm_api["DE_GSM"]
-    eigenvector_follow = pygsm_api["eigenvector_follow"]
-    lbfgs = pygsm_api["lbfgs"]
-    nifty = pygsm_api["nifty"]
-    ElementData = pygsm_api["ElementData"]
-    Topology = pygsm_api["Topology"]
-    PrimitiveInternalCoordinates = pygsm_api["PrimitiveInternalCoordinates"]
-    DelocalizedInternalCoordinates = pygsm_api["DelocalizedInternalCoordinates"]
-    Molecule = pygsm_api["Molecule"]
 
     # read config
     optimizer_method = config.get("optimizer_method", "eigenvector_follow")
@@ -98,8 +63,7 @@ def run_gsm(
     else:
         raise ValueError(f"Unsupported gsm_type: {gsm_type}. Supported types are 'DE_GSM' and 'SE_GSM'.")
 
-    nifty.printcool("Parsed GSM")
-
+    nifty.printcool("Preparing for GSM")
     # set level of theory
     calc = driver.to_ase_calc()
     lot = ASELoT.from_options(
@@ -114,7 +78,6 @@ def run_gsm(
     nifty.printcool("Building topologies")
     element_table = ElementData()
     elements = [element_table.from_symbol(sym) for sym in atoms_reactant.get_chemical_symbols()]
-
     topology_reactant = Topology.build_topology(
         xyz=atoms_reactant.get_positions(),
         atoms=elements,
@@ -123,7 +86,6 @@ def run_gsm(
         xyz=atoms_product.get_positions(),
         atoms=elements,
     )
-
     for bond in topology_product.edges():
         if bond in topology_reactant.edges() or (bond[1], bond[0]) in topology_reactant.edges():
             continue
@@ -134,24 +96,26 @@ def run_gsm(
             topology_reactant.add_edge(bond[1], bond[0])
     
     # set internal coordinates
+    connect = coordinate_type == "DLC"
+    addtr = coordinate_type == "TRIC"
+    addcart = coordinate_type == "HDLC"
     nifty.printcool("Building Primitive Internal Coordinates")
     prim_reactant = PrimitiveInternalCoordinates.from_options(
         xyz=atoms_reactant.get_positions(),
         atoms=elements,
         topology=topology_reactant,
-        connect=coordinate_type == "DLC",
-        addtr=coordinate_type == "TRIC",
-        addcart=coordinate_type == "HDLC",
+        connect=connect,
+        addtr=addtr,
+        addcart=addcart,
     )
     prim_product = PrimitiveInternalCoordinates.from_options(
         xyz=atoms_product.get_positions(),
         atoms=elements,
-        topology=topology_product,
-        connect=coordinate_type == "DLC",
-        addtr=coordinate_type == "TRIC",
-        addcart=coordinate_type == "HDLC",
+        topology=topology_reactant,  # use reactant topology for product to ensure same set of primitives
+        connect=connect,
+        addtr=addtr,
+        addcart=addcart,
     )
-
     # add product coords to reactant coords
     prim_reactant.add_union_primitives(prim_product)
 
@@ -160,16 +124,15 @@ def run_gsm(
     deloc_coords_reactant = DelocalizedInternalCoordinates.from_options(
         xyz=atoms_reactant.get_positions(),
         atoms=elements,
-        connect=coordinate_type == "DLC",
-        addtr=coordinate_type == "TRIC",
-        addcart=coordinate_type == "HDLC",
+        connect=connect,
+        addtr=addtr,
+        addcart=addcart,
         primitives=prim_reactant,
     )
 
     # molecules
     nifty.printcool(f"Building the reactant object with {coordinate_type}")
     form_hessian = optimizer_method == "eigenvector_follow"
-
     molecule_reactant = Molecule.from_options(
         geom=[[x.symbol, *x.position] for x in atoms_reactant],
         PES=pes_obj,

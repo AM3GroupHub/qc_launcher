@@ -108,6 +108,17 @@ def load_irc_runner() -> Callable[..., dict[str, Any]]:
         raise
     return run_irc
 
+def load_gsm_runner() -> Callable[..., dict[str, Any]]:
+    try:
+        from qc_launcher.tasks.gsm import run_gsm
+    except ModuleNotFoundError as exc:
+        if is_missing_package(exc, "pygsm"):
+            raise ModuleNotFoundError(
+                "GSM tasks require `pygsm`. Install it in the runtime environment."
+            ) from exc
+        raise
+    return run_gsm
+
 
 def launch_qc(config_path: str) -> None:
     from qc_launcher.tasks.freq import run_freq
@@ -177,8 +188,7 @@ def launch_md(config_path: str) -> None:
 
 
 def launch_gsm(config_path: str) -> None:
-    from qc_launcher.tasks.gsm import run_gsm
-
+    run_gsm = load_gsm_runner()
     config = load_yaml_config(config_path)
     atoms_list, filename = load_multi_structure(config)
     if len(atoms_list) == 0:
