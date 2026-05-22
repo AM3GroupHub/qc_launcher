@@ -195,6 +195,23 @@ def launch_neb(config_path: str) -> None:
     print(f"NEB calculation completed in {end_time - start_time:.2f} seconds.\n")
 
 
+def launch_autoneb(config_path: str) -> None:
+    from qc_launcher.tasks.autoneb import run_autoneb
+
+    config = load_yaml_config(config_path)
+    atoms_list, filename = load_multi_structure(config)
+    if len(atoms_list) != 2:
+        raise ValueError("AutoNEB run requires exactly two input geometries.")
+    driver = build_driver(config, atoms_list[0])
+    autoneb_config = normalize_task_config(config, "autoneb")
+    if autoneb_config is None:
+        raise ValueError("AutoNEB run requires an `autoneb` configuration block.")
+    start_time = time.time()
+    run_autoneb(driver, autoneb_config, atoms_list, filename)
+    end_time = time.time()
+    print(f"AutoNEB calculation completed in {end_time - start_time:.2f} seconds.\n")
+
+
 def launch_pysis(config_path: str) -> None:
     try:
         import pysisyphus.run as pysis_run
@@ -234,6 +251,10 @@ def build_parser() -> argparse.ArgumentParser:
     neb_parser = subparsers.add_parser("neb", help="Run NEB workflow.")
     neb_parser.add_argument("config", help="Path to YAML configuration file.")
     neb_parser.set_defaults(handler=lambda args: launch_neb(args.config))
+
+    autoneb_parser = subparsers.add_parser("autoneb", help="Run AutoNEB workflow.")
+    autoneb_parser.add_argument("config", help="Path to YAML configuration file.")
+    autoneb_parser.set_defaults(handler=lambda args: launch_autoneb(args.config))
     
     pysis_parser = subparsers.add_parser("pysis", help="Pass arguments through to pysisyphus.")
     pysis_parser.add_argument("config", help="Path to YAML configuration file.")

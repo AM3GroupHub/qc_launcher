@@ -23,7 +23,7 @@ def run_neb(
     fmax = float(config.get("fmax", 0.05))
     climb = config.get("climb", False)
     max_opt_steps = config.get("max_opt_steps", None)
-    max_neb_steps = config.get("max_neb_steps", 1000)
+    max_neb_steps = config.get("max_neb_steps", 200)
     climb_after = config.get("climb_after", 0)
     spring_constant = float(config.get("spring_constant", 0.1))
     neb_method = config.get("neb_method", "improvedtangent")

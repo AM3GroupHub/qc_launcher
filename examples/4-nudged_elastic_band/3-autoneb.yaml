@@ -7,7 +7,7 @@ driver:
   task_name: omol
 
 neb:
-  num_images: 11
+  max_images: 11
   fmax: 0.05
   climb: true
   max_opt_steps: null
@@ -15,10 +15,12 @@ neb:
   climb_after: 50
   spring_constant: 0.1
   neb_method: improvedtangent
+  space_energy_ratio: 0.5
+  smooth_curve: false
   fixed_reactant: false
   fixed_product: false
   interpolate_method: idpp
-  trajectory: da_neb.traj
+  clear_scratch: false
 
 # command:
-# qc_launch neb 2-ci-neb.yaml
+# qc_launch autoneb 3-autoneb.yaml

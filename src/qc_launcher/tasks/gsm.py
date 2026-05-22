@@ -7,7 +7,6 @@ from typing import Any
 import ase.io
 from ase import Atoms
 
-from qc_launcher.utils.optional import is_missing_package, missing_optional_dependency
 from qc_launcher.drivers.base_driver import BaseDriver
 
 
