@@ -1,0 +1,14 @@
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  solvation:
+    # method: alpb  # gbsa
+    # solvent: water
+    method: cpcm  # gbe; gb
+    epsilon: 78.4
+
+
+# command:
+# qc_launch qc 8-xtb-solv.yaml

@@ -1,0 +1,14 @@
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB  # GFN1-xTB
+  accuracy: 1.0
+  guess: sad
+  etemp: 298.15
+  max_iter: 250
+  mixer_damping: 0.4
+  verbosity: 0
+
+# command:
+# qc_launch qc 7-tblite.yaml

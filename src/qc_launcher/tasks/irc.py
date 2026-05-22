@@ -1,6 +1,5 @@
 import time
 
-import numpy as np
 import ase.io
 from ase.units import Hartree, Bohr
 from sella import IRC
@@ -26,7 +25,7 @@ def run_irc(
     eta = float(config.get("eta", 1e-4))
     keep_going = config.get("keep_going", False)
     diag_every_n = config.get("diag_every_n", None)
-    fmax_criterion = float(config.get("fmax", 4.5e-4)) * Hartree / Bohr
+    fmax_criterion = float(config.get("fmax", 4.5e-4 * Hartree / Bohr))
     steps = config.get("steps", 10)
     direction = config.get("direction", "both")  # "forward", "backward", or "both"
     assert direction in ["forward", "reverse", "both"], "Invalid direction. Must be 'forward', 'backward', or 'both'."

@@ -1,0 +1,31 @@
+inputfile: water_box.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  max_iter: 250
+  retry_annealing: true
+
+md:
+  ensemble: IsotropicMTKNPT
+  minimize: false
+  timestep: 0.5  # fs
+  temperature: 300.0  # K
+  pressure: 101325  # Pa
+  dtamp: 50.0  # fs
+  pdamp: 500.0  # fs
+  tchain: 3
+  pchain: 3
+  tloop: 1
+  ploop: 1
+  nsteps: 1000
+  loginterval: 10
+  trajectory: water_npt.traj
+  logfile: water_npt.log
+  append_trajectory: false
+  init_velocities: true
+  log_stress: true
+  seed: 42
+
+# command:
+# qc_launch md 4-npt.yaml

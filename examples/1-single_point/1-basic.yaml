@@ -1,0 +1,13 @@
+inputfile: water.xyz
+
+driver:
+  name: pyscf
+  xc: B3LYP         # any other functional
+  basis: def2-TZVP  # any other basis set
+  with_df: false
+  with_gpu: true
+  threads: 4
+  max_memory: 1  # GB
+
+# command:
+# qc_launch qc 1-basic.yaml

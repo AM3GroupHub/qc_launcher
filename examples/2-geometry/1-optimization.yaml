@@ -1,0 +1,29 @@
+inputfile: water.xyz
+
+driver:
+  name: pyscf
+  xc: B3LYP
+  basis: def2-SVP
+  with_df: true
+  auxbasis: def2-universal-jkfit
+  with_gpu: true
+  thread: 4
+  max_memory: 1  # GB
+
+opt:
+  ts: false  # default
+  calc_hess: false  # default: false when ts=false, true when ts=true
+  trajectory: water_opt.traj  # ${inputfile}_opt.traj
+  outputfile: water_opt.xyz  # ${inputfile}_opt.xyz
+  internal: true  # default
+  delta: 0.01  # default
+  eta: 1e-4  # default
+  gamma: 0.1  # default
+  nsteps_per_diag: 3  # default
+  diag_every_n: null  # default
+  ediff: 2.72e-5  # (eV) Gaussian default
+  fmax: 0.023  # (eV/Å) Gaussian default
+  frms: 0.015  # (eV/Å) Gaussian default
+  dmax: 0.0095  # (Å) Gaussian default
+  drms: 0.0006  # (Å) Gaussian default
+  max_steps: 150  # default

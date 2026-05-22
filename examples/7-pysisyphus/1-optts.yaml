@@ -1,0 +1,19 @@
+calc:
+  type: qc_launcher
+  driver:
+    name: tblite
+    method: GFN2-xTB
+    max_iter: 100
+    verbosity: 0
+  charge: 0
+  mult: 1
+geom:
+  type: redund
+  fn: ts_guess.xyz
+tsopt:
+  type: rsprfo
+  do_hess: true
+  hessian_recalc: 5
+  max_cycles: 50
+  thresh: gau
+  prefix: ts

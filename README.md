@@ -43,32 +43,32 @@ Available subcommands:
 - `md`: molecular dynamics
 - `gsm`: growing string method
 - `neb`: nudged elastic band
-- `pysis`: pass-through runner for `pysisyphus`
+- `pysis`: run a `pysisyphus` YAML through the `qc_launcher` calculator bridge
 
 ## Quick Start
 
-Quantum chemistry:
+Single point:
 
 ```bash
-qc_launch qc examples/qc/pyscf_qc.yaml
+(cd examples/single_point && qc_launch qc config.yaml)
 ```
 
 Molecular dynamics:
 
 ```bash
-qc_launch md examples/md/tblite_md.yaml
+(cd examples/6-md && qc_launch md 2-langevin.yaml)
 ```
 
 Growing string method:
 
 ```bash
-qc_launch gsm examples/gsm/pyscf_gsm.yaml
+(cd examples/5-gsm && qc_launch gsm 1-gsm.yaml)
 ```
 
 `pysisyphus` bridge:
 
 ```bash
-qc_launch pysis --yaml examples/pysisyphus/RUN.yaml
+(cd examples/optts_pysisyphus && qc_launch pysis config.yaml)
 ```
 
 
@@ -76,12 +76,28 @@ qc_launch pysis --yaml examples/pysisyphus/RUN.yaml
 
 Placeholder inputs live under [`examples/`](/home/admin/storage/repo/qc_launcher/examples). They are meant to be edited, not run as-is for production work.
 
-- [`examples/qc/`](/home/admin/storage/repo/qc_launcher/examples/qc): PySCF and TBLite QC examples
-- [`examples/md/`](/home/admin/storage/repo/qc_launcher/examples/md): short MD example
-- [`examples/gsm/`](/home/admin/storage/repo/qc_launcher/examples/gsm): GSM example with two-frame XYZ placeholder
-- [`examples/pysisyphus/`](/home/admin/storage/repo/qc_launcher/examples/pysisyphus): `pysisyphus` TS optimization template
+- [`examples/single_point/`](/home/admin/storage/repo/qc_launcher/examples/single_point): single-point energy
+- [`examples/opt/`](/home/admin/storage/repo/qc_launcher/examples/opt): Sella minimum optimization
+- [`examples/freq/`](/home/admin/storage/repo/qc_launcher/examples/freq): PySCF frequency analysis
+- [`examples/optts_sella/`](/home/admin/storage/repo/qc_launcher/examples/optts_sella): Sella transition-state optimization
+- [`examples/irc_sella/`](/home/admin/storage/repo/qc_launcher/examples/irc_sella): Sella IRC
+- [`examples/4-neb/`](/home/admin/storage/repo/qc_launcher/examples/4-neb): NEB
+- [`examples/5-gsm/`](/home/admin/storage/repo/qc_launcher/examples/5-gsm): GSM
+- [`examples/6-md/`](/home/admin/storage/repo/qc_launcher/examples/6-md): MD
+- [`examples/optts_pysisyphus/`](/home/admin/storage/repo/qc_launcher/examples/optts_pysisyphus): `pysisyphus` OptTS
+- [`examples/irc_pysisyphus/`](/home/admin/storage/repo/qc_launcher/examples/irc_pysisyphus): `pysisyphus` IRC
 
 Replace the shipped XYZ placeholders with your own structures before running.
+
+## Config Templates
+
+Reusable templates are in [`config/`](/home/admin/storage/repo/qc_launcher/config). They point at the dummy structures in `examples/` and can be run from the repository root, for example:
+
+```bash
+qc_launch qc config/run_single_point.yaml
+qc_launch neb config/run_neb.yaml
+qc_launch pysis config/run_optts_pysisyphus.yaml
+```
 
 ## Notes
 
@@ -89,4 +105,3 @@ Replace the shipped XYZ placeholders with your own structures before running.
 - `qc_launch gsm` raises a clear install hint if `[gsm]` is missing.
 - `qc_launch pysis` raises a clear install hint if `[pysisyphus]` is missing.
 - Any ASE-compatible driver in `qc_launcher` that provides energies and forces can be used for GSM.
-

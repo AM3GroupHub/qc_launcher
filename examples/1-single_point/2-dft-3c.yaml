@@ -1,0 +1,12 @@
+inputfile: water.xyz
+
+driver:
+  name: pyscf
+  xc: B97-3c  # r2SCAN-3c
+  with_df: false
+  with_gpu: true
+  threads: 4
+  max_memory: 1  # GB
+
+# command:
+# qc_launch qc 2-dft-3c.yaml

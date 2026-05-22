@@ -1,0 +1,24 @@
+inputfile: da.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  max_iter: 250
+  retry_annealing: true
+
+neb:
+  num_images: 11
+  fmax: 0.05
+  climb: true
+  max_opt_steps: 0.1  # FIRE max step in Angstrom
+  max_neb_steps: 400
+  climb_after: 100
+  spring_constant: 0.1
+  neb_method: improvedtangent
+  fixed_reactant: false
+  fixed_product: false
+  interpolate_method: idpp
+  trajectory: da_cineb.traj
+
+# command:
+# qc_launch neb 2-ci-neb.yaml

@@ -1,0 +1,17 @@
+inputfile: fe_aquo.xyz
+
+driver:
+  name: pyscf
+  xc: PBE
+  basis: def2-SVP
+  with_df: false
+  with_gpu: true
+  retry_soscf: true
+  scf_conv_tol: 1.0e-8
+  direct_scf_tol: 1.0e-8
+  threads: 4
+  max_memory: 2
+
+
+# command:
+# qc_launch qc 6-soscf.yaml

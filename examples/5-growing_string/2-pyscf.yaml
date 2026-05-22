@@ -1,0 +1,29 @@
+inputfile: da.xyz
+
+driver:
+  name: pyscf
+  xc: B3LYP
+  basis: def2-SVP
+  with_df: true
+  auxbasis: def2-universal-jkfit
+  with_gpu: true
+  threads: 4
+  max_memory: 4  # GB
+
+gsm:
+  gsm_type: DE_GSM
+  num_nodes: 9
+  coordinate_type: DLC
+  optimizer_method: lbfgs
+  line_search: NoLineSearch
+  climb: true
+  fmax: 0.05
+  dmax: 0.1
+  max_gsm_steps: 80
+  max_opt_steps: 3
+  fixed_reactant: true
+  fixed_product: true
+  clear_scratch: false
+
+# command:
+# qc_launch gsm 2-pyscf.yaml

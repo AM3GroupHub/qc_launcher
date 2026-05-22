@@ -1,0 +1,28 @@
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  max_iter: 250
+  retry_annealing: true
+
+md:
+  ensemble: Langevin
+  minimize: true
+  optimizer: FIRE
+  fmax: 0.05
+  max_min_steps: 100
+  min_trajectory: water_min.traj
+  timestep: 0.5  # fs
+  temperature: 300.0  # K
+  friction: 0.002  # 1/fs
+  nsteps: 1000
+  loginterval: 10
+  trajectory: water_langevin.traj
+  logfile: water_langevin.log
+  append_trajectory: false
+  init_velocities: true
+  seed: 42
+
+# command:
+# qc_launch md 2-langevin.yaml

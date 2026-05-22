@@ -1,0 +1,27 @@
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  max_iter: 250
+  retry_annealing: true
+
+md:
+  ensemble: NVE  # VelocityVerlet
+  minimize: true
+  optimizer: FIRE
+  fmax: 0.05
+  max_min_steps: 100
+  min_trajectory: water_min.traj
+  timestep: 0.5  # fs
+  temperature: 300.0  # K
+  nsteps: 1000
+  loginterval: 10
+  trajectory: water_nve.traj
+  logfile: water_nve.log
+  append_trajectory: false
+  init_velocities: true
+  seed: 42
+
+# command:
+# qc_launch md 1-nve.yaml

@@ -1,0 +1,12 @@
+inputfile: da.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+
+opt:
+  ts: true
+  calc_hess: true
+  diag_every_n: 5  # check every 5 steps, if not only one imaginary frequency, calculate exact hessian
+
+freq: true

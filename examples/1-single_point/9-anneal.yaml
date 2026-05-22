@@ -1,0 +1,11 @@
+inputfile: fe_aquo.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  max_iter: 10
+  retry_annealing: true
+
+
+# command:
+# qc_launch qc 9-anneal.yaml

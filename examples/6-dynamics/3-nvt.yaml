@@ -1,0 +1,30 @@
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  max_iter: 250
+  retry_annealing: true
+
+md:
+  ensemble: NVT  # NoseHooverChainNVT
+  minimize: true
+  optimizer: FIRE
+  fmax: 0.05
+  max_min_steps: 100
+  min_trajectory: water_min.traj
+  timestep: 0.5  # fs
+  temperature: 300.0  # K
+  dtamp: 50.0  # fs
+  tchain: 3
+  tloop: 1
+  nsteps: 1000
+  loginterval: 10
+  trajectory: water_nvt.traj
+  logfile: water_nvt.log
+  append_trajectory: false
+  init_velocities: true
+  seed: 42
+
+# command:
+# qc_launch md 3-nvt.yaml

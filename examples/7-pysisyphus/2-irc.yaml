@@ -1,0 +1,22 @@
+calc:
+  type: qc_launcher
+  driver:
+    name: tblite
+    method: GFN2-xTB
+    max_iter: 100
+    verbosity: 0
+  charge: 0
+  mult: 1
+geom:
+  type: redund
+  fn: ts_guess.xyz
+irc:
+  type: eulerpc
+  rms_grad_thresh: 1.0e-3
+  hessian_recalc: 10
+  max_cycles: 50
+  forward: true
+  backward: true
+endopt:
+  thresh: gau_tight
+  trust_max: 0.1

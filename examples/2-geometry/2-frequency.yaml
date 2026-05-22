@@ -1,0 +1,20 @@
+inputfile: water.xyz
+
+driver:
+  name: pyscf
+  xc: B3LYP
+  basis: def2-SVP
+  with_df: true
+  auxbasis: def2-universal-jkfit
+  with_gpu: true
+  thread: 4
+  max_memory: 1  # GB
+
+freq:
+  temperature: 298.15  # K
+  pressure: 101325  # Pa
+  vibfile: water_vib.txt  # ${inputfile}_vib.txt
+  qrrho: true
+  alpha: 4.0
+  omega0: 100.0
+  Bav: 1.0e-44  # optional: "auto", Tr[I]

@@ -1,0 +1,16 @@
+inputfile: water.xyz
+
+driver:
+  name: pyscf
+  xc: B3LYP
+  basis: def2-SVP
+  with_df: true
+  auxbasis: def2-universal-jkfit
+  with_gpu: true
+  thread: 4
+  max_memory: 1  # GB
+
+opt:
+  constraints:
+    fix_bond: [[0, 1], [0, 2]]  # fix two O-H bonds
+    # fix_angle: [[1, 0, 2]]  # fix the H-O-H angle

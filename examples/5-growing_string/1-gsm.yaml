@@ -1,0 +1,25 @@
+inputfile: da.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+  max_iter: 250
+  retry_annealing: true
+
+gsm:
+  gsm_type: DE_GSM
+  num_nodes: 9
+  coordinate_type: DLC  # DLC, TRIC, HDLC
+  optimizer_method: eigenvector_follow
+  line_search: NoLineSearch
+  climb: true
+  fmax: 0.05
+  dmax: 0.1
+  max_gsm_steps: 100
+  max_opt_steps: 3
+  fixed_reactant: false
+  fixed_product: false
+  clear_scratch: false
+
+# command:
+# qc_launch gsm 1-gsm.yaml

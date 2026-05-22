@@ -102,9 +102,12 @@ def run_opt(
     # convergence criteria
     ediff_criterion = float(config.get("ediff", 1e-6 * Hartree))
     fmax_criterion = float(config.get("fmax", 4.5e-4 * Hartree / Bohr))
-    frms_criterion = float(config.get("frms", 3.0e-4 * Hartree / Bohr))
+    if cons_dict:
+        frms_criterion = np.inf  # ignore RMS force criterion when constraints are present
+    else:
+        frms_criterion = float(config.get("frms", 3.0e-4 * Hartree / Bohr))
     dmax_criterion = float(config.get("dmax", 1.8e-3 * Bohr))
-    drmx_criterion = float(config.get("drmx", 1.2e-3 * Bohr))
+    drms_criterion = float(config.get("drms", 1.2e-3 * Bohr))
     max_steps = config.get("max_steps", 150)
 
     # set sella optimizer
@@ -129,23 +132,24 @@ def run_opt(
     # run optimization
     last_pos = atoms.get_positions().copy()
     last_energy = np.inf
-    for _ in sella.irun(fmax=0, steps=max_steps):
+    for _ in sella.irun(fmax=fmax_criterion, steps=max_steps):
         delta_pos = np.linalg.norm(atoms.get_positions() - last_pos, axis=1)
         delta_energy = abs(atoms.get_potential_energy() - last_energy)
-        fmax = np.max(np.abs(atoms.get_forces()))
-        frms = np.sqrt(np.mean(atoms.get_forces()**2))
+        fmax_cmax_conv = sella.converged()
+        frms = np.mean(np.linalg.norm(sella.pes.get_projected_forces(), axis=1))
         dmax = np.max(delta_pos)
         drms = np.sqrt(np.mean(delta_pos**2))
         if (delta_energy < ediff_criterion and
-            fmax < fmax_criterion and
+            fmax_cmax_conv and
             frms < frms_criterion and
             dmax < dmax_criterion and
-            drms < drmx_criterion):
+            drms < drms_criterion):
             print("Optimization converged!")
             break
         last_pos = atoms.get_positions().copy()
         last_energy = atoms.get_potential_energy()
     else:
+        fmax = np.max(np.linalg.norm(sella.pes.get_projected_forces(), axis=1))
         print("Optimization did not converge within the maximum number of steps.")
         print(f"Final Energy Change   : {delta_energy:.6e} eV")
         print(f"Final MAX force       : {fmax:.6e} eV/Å")

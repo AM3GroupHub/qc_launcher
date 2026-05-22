@@ -1,0 +1,14 @@
+inputfile: water.xyz
+
+driver:
+  name: pyscf
+  xc: wB97M-D3BJ
+  basis: def2-TZVP
+  with_df: true    # turn on density fitting
+  auxbasis: def2-universal-jkfit  # set the auxiliary basis
+  with_gpu: true
+  threads: 4
+  max_memory: 1  # GB
+
+# command:
+# qc_launch qc 3-df.yaml
