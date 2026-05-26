@@ -132,6 +132,7 @@ def run_opt(
     # run optimization
     last_pos = atoms.get_positions().copy()
     last_energy = np.inf
+    converged = False
     for _ in sella.irun(fmax=fmax_criterion, steps=max_steps):
         delta_pos = np.linalg.norm(atoms.get_positions() - last_pos, axis=1)
         delta_energy = abs(atoms.get_potential_energy() - last_energy)
@@ -145,10 +146,12 @@ def run_opt(
             dmax < dmax_criterion and
             drms < drms_criterion):
             print("Optimization converged!")
+            converged = True
             break
         last_pos = atoms.get_positions().copy()
         last_energy = atoms.get_potential_energy()
-    else:
+    
+    if not converged:
         fmax = np.max(np.linalg.norm(sella.pes.get_projected_forces(), axis=1))
         print("Optimization did not converge within the maximum number of steps.")
         print(f"Final Energy Change   : {delta_energy:.6e} eV")
