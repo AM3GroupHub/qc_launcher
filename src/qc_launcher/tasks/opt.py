@@ -102,12 +102,10 @@ def run_opt(
     # convergence criteria
     ediff_criterion = float(config.get("ediff", 1e-6 * Hartree))
     fmax_criterion = float(config.get("fmax", 4.5e-4 * Hartree / Bohr))
-    if cons_dict:
-        frms_criterion = np.inf  # ignore RMS force criterion when constraints are present
-    else:
-        frms_criterion = float(config.get("frms", 3.0e-4 * Hartree / Bohr))
+    frms_criterion = float(config.get("frms", 3.0e-4 * Hartree / Bohr))
     dmax_criterion = float(config.get("dmax", 1.8e-3 * Bohr))
     drms_criterion = float(config.get("drms", 1.2e-3 * Bohr))
+    cmax_criterion = np.inf if cons is None else constraints_tol
     max_steps = config.get("max_steps", 150)
 
     # set sella optimizer
@@ -132,34 +130,33 @@ def run_opt(
     # run optimization
     last_pos = atoms.get_positions().copy()
     last_energy = np.inf
-    converged = False
-    for _ in sella.irun(fmax=fmax_criterion, steps=max_steps):
+    for _ in sella.irun(fmax=0.0, steps=max_steps):
         delta_pos = np.linalg.norm(atoms.get_positions() - last_pos, axis=1)
         delta_energy = abs(atoms.get_potential_energy() - last_energy)
-        fmax_cmax_conv = sella.converged()
+        fmax = np.max(np.linalg.norm(sella.pes.get_projected_forces(), axis=1))
         frms = np.mean(np.linalg.norm(sella.pes.get_projected_forces(), axis=1))
         dmax = np.max(delta_pos)
         drms = np.sqrt(np.mean(delta_pos**2))
+        cmax = np.linalg.norm(sella.pes.get_res())
         if (delta_energy < ediff_criterion and
-            fmax_cmax_conv and
+            fmax < fmax_criterion and
             frms < frms_criterion and
             dmax < dmax_criterion and
-            drms < drms_criterion):
+            drms < drms_criterion and
+            cmax < cmax_criterion):
             print("Optimization converged!")
-            converged = True
             break
         last_pos = atoms.get_positions().copy()
         last_energy = atoms.get_potential_energy()
-    
-    if not converged:
-        fmax = np.max(np.linalg.norm(sella.pes.get_projected_forces(), axis=1))
+    else:
         print("Optimization did not converge within the maximum number of steps.")
-        print(f"Final Energy Change   : {delta_energy:.6e} eV")
-        print(f"Final MAX force       : {fmax:.6e} eV/Å")
-        print(f"Final RMS force       : {frms:.6e} eV/Å")
-        print(f"Final MAX displacement: {dmax:.6e} Å")
-        print(f"Final RMS displacement: {drms:.6e} Å")
-    
+        print(f"Final Energy Change   : {delta_energy:.6e} eV, criterion: {ediff_criterion:.6e} eV")
+        print(f"Final MAX force       : {fmax:.6e} eV/Å , criterion: {fmax_criterion:.6e} eV/Å")
+        print(f"Final RMS force       : {frms:.6e} eV/Å , criterion: {frms_criterion:.6e} eV/Å")
+        print(f"Final MAX displacement: {dmax:.6e} Å, criterion: {dmax_criterion:.6e} Å")
+        print(f"Final RMS displacement: {drms:.6e} Å, criterion: {drms_criterion:.6e} Å")
+        print(f"Final MAX constraint  : {cmax:.6e}, criterion: {cmax_criterion:.6e}")
+
     # save final structure
     ase.io.write(opt_outputfile, atoms, columns=["symbols", "positions"])
     
