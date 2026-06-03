@@ -80,7 +80,8 @@ class MACEDriver(BaseDriver):
 
     def _add_spin_tag(self):
         # the tag of "multiplicity" in MACE is `spin`, which is different from the `spin` in pyscf
-        self.atoms.info["spin"] = self.atoms.info.get("multiplicity", 1)
+        if self.atoms is not None:
+            self.atoms.info["spin"] = self.atoms.info.get("multiplicity", 1)
     
     def update_atoms(self, atoms: Optional[Atoms]) -> bool:
         updated = super().update_atoms(atoms)
@@ -115,6 +116,8 @@ class MACEDriver(BaseDriver):
         return self.calc
 
     def to_pyscf_mf(self):
+        if self.atoms is None:
+            raise ValueError("Atoms must be provided to convert to pyscf mean-field object.")
         mol = gto.M(
             atom=[(symb, coord) for symb, coord in zip(self.atoms.get_chemical_symbols(), self.atoms.get_positions())],
             charge=self.atoms.info.get("charge", 0),
