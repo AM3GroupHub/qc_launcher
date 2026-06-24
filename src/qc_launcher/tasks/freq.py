@@ -22,7 +22,6 @@ def run_freq(
         symm.geom.TOLERANCE = config["symm_geom_tol"] / Bohr  # convert from Angstrom to Bohr
 
     # record the start time
-    results = {}
     start_time = time.time()
     
     # get config
@@ -33,6 +32,7 @@ def run_freq(
     alpha: float = config.get("alpha", 4.0)
     omega0: float = config.get("omega0", 100.0)
     Bav: Union[float, str] = config.get("Bav", 1.0e-44)
+    save_hess: bool = config.get("save_hess", False)
 
     # compute the hessian
     hessian = driver.compute_hessian(use_cache=True, hess_format="pyscf")
@@ -40,8 +40,10 @@ def run_freq(
     print(f"Hessian computation completed in {end_time - start_time:.2f} seconds.")
 
     # save hessian
-    results["hessian"] = (hessian, "Eh/Bohr^2")
-    
+    if save_hess:
+        hess_ = driver._convert_hessian_format(hessian, hess_format="ase")
+        np.savetxt(f"{filename}_hess.txt", hess_)
+
     # vibrational analysis
     start_time = time.time()
     mf = driver.to_pyscf_mf()
@@ -53,16 +55,11 @@ def run_freq(
         print(f"Note: {num_imag} imaginary frequencies detected!")
 
     # save frequencies and normal modes
-    results["frequencies"] = (freq_info["freq_wavenumber"], "cm^-1")
-    results["normal_modes"] = (freq_info["norm_mode"], "")
 
     # calculate and log thermo info
     thermo_info = thermo.thermo(mf, freq_au, temperature=temperature, pressure=pressure)
     dump_normal_mode(mf.mol, freq_info)
     thermo.dump_thermo(mf.mol, thermo_info)
-
-    # save thermo info
-    results.update(thermo_info)
 
     # apply quasi-RRHO correction if requested
     if qrrho:
@@ -109,8 +106,6 @@ def run_freq(
         print(f"qRRHO G_tot [Eh]      : {qrrho_info['G_tot_qrrho'][0]:16.10f}")
         print("==================================================\n")
         
-        # save qRRHO thermo info
-        results.update(qrrho_info)
 
     write_pyvibms(vibfile, driver.atoms.get_chemical_symbols(),
         freq_info["freq_wavenumber"], freq_info["norm_mode"]

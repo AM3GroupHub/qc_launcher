@@ -104,7 +104,6 @@ class PySCFDriver(BaseDriver):
         self.method = None if atoms is None else self.build_method(atoms=atoms)
         self._dm_cache = None  # cache for density matrix
         self.retry_soscf = self.config.get("retry_soscf", False)
-        self._extra_results = {}  # store extra results such as energy components, orbital energies, etc.
     
     def _build_mf(self, atoms: Optional[Atoms] = None, config: Optional[dict] = None):
         """
@@ -329,7 +328,6 @@ class PySCFDriver(BaseDriver):
         return self.method
 
     def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
-        self._extra_results.clear()  # clear previous extra results
         e_tot = self.run_kernel(atoms=atoms, use_cache=True)
         scf_summary = self.method.scf_summary
         e1 = scf_summary.get("e1", 0.0)        # one-electron energy
@@ -341,15 +339,10 @@ class PySCFDriver(BaseDriver):
         self.log(f"One-electron Energy [Eh]: {e1:16.10f}")
         self.log(f"Coulomb Energy      [Eh]: {e_coul:16.10f}")
         self.log(f"XC Energy           [Eh]: {e_xc:16.10f}")
-        self._extra_results["e1"] = (e1, "Eh")
-        self._extra_results["e_coul"] = (e_coul, "Eh")
-        self._extra_results["e_xc"] = (e_xc, "Eh")
         if abs(e_disp) > 1e-10:
             self.log(f"Dispersion Energy   [Eh]: {e_disp:16.10f}")
-            self._extra_results["e_disp"] = (e_disp, "Eh")
         if abs(e_solvent) > 1e-10:
             self.log(f"Solvent Energy      [Eh]: {e_solvent:16.10f}")
-            self._extra_results["e_solvent"] = (e_solvent, "Eh")
         dm = self.method.make_rdm1()
         if not isinstance(dm, np.ndarray):
             dm = dm.get()  # convert cupy array to numpy array if needed
@@ -364,17 +357,11 @@ class PySCFDriver(BaseDriver):
             self.log(f"LUMO Beta  [Eh]: {mo_energy[1][nb]:12.6f}")
             self.log(f"HOMO Alpha [Eh]: {mo_energy[0][na-1]:12.6f}")
             self.log(f"HOMO Beta  [Eh]: {mo_energy[1][nb-1]:12.6f}")
-            self._extra_results["lumo_alpha"] = (mo_energy[0][na], "Eh")
-            self._extra_results["lumo_beta"] = (mo_energy[1][nb], "Eh")
-            self._extra_results["homo_alpha"] = (mo_energy[0][na-1], "Eh")
-            self._extra_results["homo_beta"] = (mo_energy[1][nb-1], "Eh")
         else:  # closed-shell
             mo_energy.sort()
             nocc = self.method.mol.nelectron // 2
             self.log(f"LUMO [Eh]: {mo_energy[nocc]:12.6f}")
             self.log(f"HOMO [Eh]: {mo_energy[nocc-1]:12.6f}")
-            self._extra_results["lumo"] = (mo_energy[nocc], "Eh")
-            self._extra_results["homo"] = (mo_energy[nocc-1], "Eh")
         return e_tot, "Eh"
 
     def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
@@ -430,7 +417,4 @@ class PySCFDriver(BaseDriver):
         for i, charge in enumerate(q2):
             self.log(f"{i+1:3d} {charge:16.10f}")
         return q2
-
-    def dump_extra_results(self):
-        return self._extra_results.copy()
 
