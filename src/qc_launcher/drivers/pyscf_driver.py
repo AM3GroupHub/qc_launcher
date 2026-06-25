@@ -117,23 +117,23 @@ class PySCFDriver(BaseDriver):
         """
         self.update_atoms(atoms)
         config = self.config if config is None else config
-        xc = config.get("xc", "B3LYP")
-        basis = config.get("basis", "def2-SVP")
-        ecp = config.get("ecp", None)
-        nlc = config.get("nlc", '')
-        disp = config.get("disp", None)
-        grids = config.get("grids", None)
-        nlcgrids = config.get("nlcgrids", None)
-        verbose = config.get("verbose", 2)
-        scf_conv_tol = float(config.get("scf_conv_tol", 1e-8))
-        direct_scf_tol = float(config.get("direct_scf_tol", 1e-8))
-        scf_max_cycle = int(config.get("scf_max_cycle", 50))
-        level_shift = float(config.get("level_shift", 0.0))
-        diis_space = int(config.get("diis_space", 8))
-        with_df = config.get("with_df", True)
-        auxbasis = config.get("auxbasis", None)
-        with_gpu = config.get("with_gpu", True)
-
+        xc: str = config.get("xc", "B3LYP")
+        restricted: Optional[bool] = config.get("restricted", None)
+        basis: str = config.get("basis", "def2-SVP")
+        ecp: Optional[str] = config.get("ecp", None)
+        nlc: str = config.get("nlc", '')
+        disp: Optional[str] = config.get("disp", None)
+        grids: Optional[dict] = config.get("grids", None)
+        nlcgrids: Optional[dict] = config.get("nlcgrids", None)
+        verbose: int = config.get("verbose", 2)
+        scf_conv_tol: float = float(config.get("scf_conv_tol", 1e-8))
+        direct_scf_tol: float = float(config.get("direct_scf_tol", 1e-8))
+        scf_max_cycle: int = int(config.get("scf_max_cycle", 50))
+        level_shift: float = float(config.get("level_shift", 0.0))
+        diis_space: int = int(config.get("diis_space", 8))
+        with_df: bool = config.get("with_df", True)
+        auxbasis: Optional[str] = config.get("auxbasis", None)
+        with_gpu: bool = config.get("with_gpu", True)
         with_solvent = config.get("with_solvent", False)
         solvent = config.get("solvent", {"method": "ief-pcm", "eps": 78.3553, "solvent": "water"})
 
@@ -160,7 +160,12 @@ class PySCFDriver(BaseDriver):
         mol.build()
 
         # build Kohn-Sham object
-        mf = dft.KS(mol, xc=xc)
+        if restricted is True:
+            mf = dft.RKS(mol, xc=xc) if spin % 2 == 0 else dft.ROKS(mol, xc=xc)
+        elif restricted is False:
+            mf = dft.UKS(mol, xc=xc)
+        else:
+            mf = dft.KS(mol, xc=xc)
         mf.nlc = nlc
         mf.disp = disp
         # set grids
