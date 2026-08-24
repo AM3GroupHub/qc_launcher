@@ -104,7 +104,7 @@ class MACEDriver(BaseDriver):
             dispersion_xc = self.config.get("dispersion_xc", "pbe")
             damping = self.config.get("damping", "bj")
             return mace_mp(
-                model=model_path, device=device, precision=precision, head=head,
+                model=model_path, device=device, default_dtype=precision, head=head,
                 dispersion=dispersion, dispersion_xc=dispersion_xc, damping=damping,
             )
         else:
