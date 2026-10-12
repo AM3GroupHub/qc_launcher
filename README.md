@@ -105,3 +105,4 @@ qc_launch pysis config/run_optts_pysisyphus.yaml
 - `qc_launch gsm` raises a clear install hint if `[gsm]` is missing.
 - `qc_launch pysis` raises a clear install hint if `[pysisyphus]` is missing.
 - Any ASE-compatible driver in `qc_launcher` that provides energies and forces can be used for GSM.
+- GSM options of note: `ts_search` (`none`, `climb`, `exact`; the legacy `climb: true/false` still maps to `climb`/`exact`), `log_level` (pygsm log verbosity, default `INFO`) and `output_dir` (when set, pygsm keeps a `string_<ID>.xyz` checkpoint there). pygsm writes no other files; results go to `<name>_gsm.xyz` and `<name>_ts.xyz`.

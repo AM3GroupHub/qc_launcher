@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import shutil
 from typing import Any
 
 import ase.io
@@ -13,15 +11,34 @@ from qc_launcher.drivers.base_driver import BaseDriver
 from pygsm.coordinate_systems import (
     DelocalizedInternalCoordinates,
     PrimitiveInternalCoordinates,
-    Topology,
+    build_topology,
 )
-from pygsm.growing_string_methods import DE_GSM
+from pygsm.growing_string_methods import DEGSM
 from pygsm.level_of_theories.ase import ASELoT
 from pygsm.molecule import Molecule
-from pygsm.optimizers import eigenvector_follow, lbfgs
+from pygsm.optimizers import LBFGS, EigenvectorFollow
 from pygsm.potential_energy_surfaces import PES
-from pygsm.utilities import nifty
+from pygsm.utilities import output
 from pygsm.utilities.elements import ElementData
+
+
+# go_gsm rtype for each `ts_search` setting
+TS_SEARCH_RTYPE = {"none": 0, "climb": 1, "exact": 2}
+OPTIMIZERS = {"eigenvector_follow": EigenvectorFollow, "lbfgs": LBFGS}
+
+
+def resolve_ts_search(config: dict) -> str:
+    """`ts_search` (none | climb | exact), or the legacy `climb` flag.
+
+    Legacy mapping, kept for existing configs: `climb: true` -> climbing image
+    only, `climb: false` -> climbing image plus exact TS search.
+    """
+    ts_search = config.get("ts_search")
+    if ts_search is None:
+        return "climb" if config.get("climb", True) else "exact"
+    if ts_search not in TS_SEARCH_RTYPE:
+        raise ValueError(f"Unsupported ts_search: {ts_search}. Supported values are {list(TS_SEARCH_RTYPE)}.")
+    return ts_search
 
 
 def run_gsm(
@@ -34,7 +51,7 @@ def run_gsm(
     # read config
     optimizer_method = config.get("optimizer_method", "eigenvector_follow")
     line_search = config.get("line_search", "NoLineSearch")
-    climb = config.get("climb", True)
+    ts_search = resolve_ts_search(config)
     dmax = config.get("dmax", 0.1)
     coordinate_type = config.get("coordinate_type", "TRIC")
     gsm_type = config.get("gsm_type", "DE_GSM")
@@ -48,7 +65,11 @@ def run_gsm(
     max_opt_steps = config.get("max_opt_steps", 3)
     fixed_reactant = config.get("fixed_reactant", False)
     fixed_product = config.get("fixed_product", False)
-    clear_scratch = config.get("clear_scratch", False)
+    output_dir = config.get("output_dir")  # writes string_<ID>.xyz checkpoints when set
+    log_level = config.get("log_level", "INFO")
+
+    if optimizer_method not in OPTIMIZERS:
+        raise ValueError(f"Unsupported optimizer_method: {optimizer_method}. Supported methods are {list(OPTIMIZERS)}.")
 
     # read atoms
     if gsm_type == "DE_GSM":
@@ -62,26 +83,29 @@ def run_gsm(
     else:
         raise ValueError(f"Unsupported gsm_type: {gsm_type}. Supported types are 'DE_GSM' and 'SE_GSM'.")
 
-    nifty.printcool("Preparing for GSM")
+    # pygsm only logs; send its output to stdout
+    output.setup_logging(log_level.upper())
+
+    output.printcool("Preparing for GSM")
     # set level of theory
     calc = driver.to_ase_calc()
-    lot = ASELoT.from_options(
+    lot = ASELoT(
         calculator=calc,
         geom=[[x.symbol, *x.position] for x in atoms_reactant],
         ID=ID,
     )
     # build PES object
-    pes_obj = PES.from_options(lot=lot, ad_idx=0)
+    pes_obj = PES(lot=lot, ad_idx=0)
 
     # build topology
-    nifty.printcool("Building topologies")
+    output.printcool("Building topologies")
     element_table = ElementData()
     elements = [element_table.from_symbol(sym) for sym in atoms_reactant.get_chemical_symbols()]
-    topology_reactant = Topology.build_topology(
+    topology_reactant = build_topology(
         xyz=atoms_reactant.get_positions(),
         atoms=elements,
     )
-    topology_product = Topology.build_topology(
+    topology_product = build_topology(
         xyz=atoms_product.get_positions(),
         atoms=elements,
     )
@@ -93,13 +117,13 @@ def run_gsm(
             topology_reactant.add_edge(bond[0], bond[1])
         else:
             topology_reactant.add_edge(bond[1], bond[0])
-    
+
     # set internal coordinates
     connect = coordinate_type == "DLC"
     addtr = coordinate_type == "TRIC"
     addcart = coordinate_type == "HDLC"
-    nifty.printcool("Building Primitive Internal Coordinates")
-    prim_reactant = PrimitiveInternalCoordinates.from_options(
+    output.printcool("Building Primitive Internal Coordinates")
+    prim_reactant = PrimitiveInternalCoordinates(
         xyz=atoms_reactant.get_positions(),
         atoms=elements,
         topology=topology_reactant,
@@ -107,7 +131,7 @@ def run_gsm(
         addtr=addtr,
         addcart=addcart,
     )
-    prim_product = PrimitiveInternalCoordinates.from_options(
+    prim_product = PrimitiveInternalCoordinates(
         xyz=atoms_product.get_positions(),
         atoms=elements,
         topology=topology_reactant,  # use reactant topology for product to ensure same set of primitives
@@ -119,8 +143,8 @@ def run_gsm(
     prim_reactant.add_union_primitives(prim_product)
 
     # delocalized internal coordinates
-    nifty.printcool("Building Delocalized Internal Coordinates")
-    deloc_coords_reactant = DelocalizedInternalCoordinates.from_options(
+    output.printcool("Building Delocalized Internal Coordinates")
+    deloc_coords_reactant = DelocalizedInternalCoordinates(
         xyz=atoms_reactant.get_positions(),
         atoms=elements,
         connect=connect,
@@ -130,15 +154,15 @@ def run_gsm(
     )
 
     # molecules
-    nifty.printcool(f"Building the reactant object with {coordinate_type}")
+    output.printcool(f"Building the reactant object with {coordinate_type}")
     form_hessian = optimizer_method == "eigenvector_follow"
-    molecule_reactant = Molecule.from_options(
+    molecule_reactant = Molecule(
         geom=[[x.symbol, *x.position] for x in atoms_reactant],
         PES=pes_obj,
         coord_obj=deloc_coords_reactant,
         Form_Hessian=form_hessian,
     )
-    molecule_product = Molecule.copy_from_options(
+    molecule_product = Molecule.copy_from(
         molecule_reactant,
         xyz=atoms_product.get_positions(),
         new_node_id=num_nodes - 1,
@@ -146,26 +170,19 @@ def run_gsm(
     )
 
     # optimizer
-    nifty.printcool("Building optimizer")
-    opt_options = dict(
+    output.printcool("Building optimizer")
+    optimizer_object = OPTIMIZERS[optimizer_method](
         print_level=1,
         Linesearch=line_search,
-        update_hess_in_bg=not (climb or optimizer_method == "lbfgs"),
+        update_hess_in_bg=not (ts_search == "climb" or optimizer_method == "lbfgs"),
         conv_Ediff=ediff,
         conv_gmax=fmax,
         DMAX=dmax,
-        opt_climb=climb,
     )
-    if optimizer_method == "eigenvector_follow":
-        optimizer_object = eigenvector_follow.from_options(**opt_options)
-    elif optimizer_method == "lbfgs":
-        optimizer_object = lbfgs.from_options(**opt_options)
-    else:
-        raise ValueError(f"Unsupported optimizer_method: {optimizer_method}. Supported methods are 'eigenvector_follow' and 'lbfgs'.")
-    
+
     # GSM
-    nifty.printcool("Building GSM object")
-    gsm = DE_GSM.from_options(
+    output.printcool("Building GSM object")
+    gsm = DEGSM(
         reactant=molecule_reactant,
         product=molecule_product,
         nnodes=num_nodes,
@@ -179,34 +196,28 @@ def run_gsm(
         print_level=1,
         mp_cores=1,
         interp_method="DLC",
+        output_dir=output_dir,
     )
 
     # optimize reactant and product if not fixed
     if not fixed_reactant:
-        nifty.printcool("Optimizing reactant")
-        path = os.path.join(os.getcwd(), "scratch", f"{ID:03}", "0")
+        output.printcool("Optimizing reactant")
         optimizer_object.optimize(
             molecule=molecule_reactant,
             refE=molecule_reactant.energy,
             opt_steps=100,
-            path=path,
         )
     if not fixed_product:
-        nifty.printcool("Optimizing product")
-        path = os.path.join(os.getcwd(), "scratch", f"{ID:03}", f"{num_nodes - 1}")
+        output.printcool("Optimizing product")
         optimizer_object.optimize(
             molecule=molecule_product,
             refE=molecule_product.energy,
             opt_steps=100,
-            path=path,
         )
-    
-    # set rtype
-    rtype = 1 if climb else 2
 
     # run GSM
-    nifty.printcool("Running GSM")
-    gsm.go_gsm(max_iters=max_gsm_steps, opt_steps=max_opt_steps, rtype=rtype)
+    output.printcool("Running GSM")
+    gsm.go_gsm(max_iters=max_gsm_steps, opt_steps=max_opt_steps, rtype=TS_SEARCH_RTYPE[ts_search])
 
     # write the results into an xyz file
     # add charge and multiplicity info to the frames
@@ -221,12 +232,6 @@ def run_gsm(
     # write to xyz
     ase.io.write(f"{filename}_gsm.xyz", string_ase)
     ase.io.write(f"{filename}_ts.xyz", ts_ase)
-
-    # clear scratch
-    if clear_scratch:
-        scratch_dir = os.path.join(os.getcwd(), "scratch")
-        if os.path.exists(scratch_dir):
-            shutil.rmtree(scratch_dir)
 
 
 def gsm_to_ase_atoms(gsm: Any):
