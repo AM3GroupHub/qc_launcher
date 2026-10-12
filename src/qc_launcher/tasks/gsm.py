@@ -166,7 +166,6 @@ def run_gsm(
         molecule_reactant,
         xyz=atoms_product.get_positions(),
         new_node_id=num_nodes - 1,
-        copy_wavefunction=False,
     )
 
     # optimizer
