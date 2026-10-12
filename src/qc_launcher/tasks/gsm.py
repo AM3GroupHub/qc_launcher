@@ -8,18 +8,19 @@ from ase import Atoms
 from qc_launcher.drivers.base_driver import BaseDriver
 
 
-from pygsm.coordinate_systems import (
+from pygsm import (
+    DEGSM,
+    LBFGS,
+    PES,
+    ASELoT,
     DelocalizedInternalCoordinates,
+    EigenvectorFollow,
+    Molecule,
     PrimitiveInternalCoordinates,
     build_topology,
 )
-from pygsm.growing_string_methods import DEGSM
-from pygsm.level_of_theories.ase import ASELoT
-from pygsm.molecule import Molecule
-from pygsm.optimizers import LBFGS, EigenvectorFollow
-from pygsm.potential_energy_surfaces import PES
-from pygsm.utilities import output
-from pygsm.utilities.elements import ElementData
+from pygsm.utils import output
+from pygsm.utils.elements import ElementData
 
 
 # go_gsm rtype for each `ts_search` setting
