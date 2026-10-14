@@ -93,7 +93,7 @@ def run_gsm(
     lot = ASELoT(
         calculator=calc,
         geom=[[x.symbol, *x.position] for x in atoms_reactant],
-        ID=ID,
+        string_id=ID,
     )
     # build PES object
     pes_obj = PES(lot=lot, ad_idx=0)
@@ -159,9 +159,9 @@ def run_gsm(
     form_hessian = optimizer_method == "eigenvector_follow"
     molecule_reactant = Molecule(
         geom=[[x.symbol, *x.position] for x in atoms_reactant],
-        PES=pes_obj,
+        pes=pes_obj,
         coord_obj=deloc_coords_reactant,
-        Form_Hessian=form_hessian,
+        form_hessian=form_hessian,
     )
     molecule_product = Molecule.copy_from(
         molecule_reactant,
@@ -173,11 +173,11 @@ def run_gsm(
     output.printcool("Building optimizer")
     optimizer_object = OPTIMIZERS[optimizer_method](
         print_level=1,
-        Linesearch=line_search,
+        linesearch=line_search,
         update_hess_in_bg=not (ts_search == "climb" or optimizer_method == "lbfgs"),
-        conv_Ediff=ediff,
+        conv_ediff=ediff,
         conv_gmax=fmax,
-        DMAX=dmax,
+        dmax=dmax,
     )
 
     # GSM
@@ -186,13 +186,13 @@ def run_gsm(
         reactant=molecule_reactant,
         product=molecule_product,
         nnodes=num_nodes,
-        CONV_TOL=conv_tol,
-        CONV_gmax=fmax,
-        CONV_Ediff=ediff,
-        ADD_NODE_TOL=add_node_tol,
+        conv_tol=conv_tol,
+        conv_gmax=fmax,
+        conv_ediff=ediff,
+        add_node_tol=add_node_tol,
         growth_direction=0,
         optimizer=optimizer_object,
-        ID=ID,
+        string_id=ID,
         print_level=1,
         mp_cores=1,
         interp_method="DLC",
@@ -204,14 +204,14 @@ def run_gsm(
         output.printcool("Optimizing reactant")
         optimizer_object.optimize(
             molecule=molecule_reactant,
-            refE=molecule_reactant.energy,
+            ref_energy=molecule_reactant.energy,
             opt_steps=100,
         )
     if not fixed_product:
         output.printcool("Optimizing product")
         optimizer_object.optimize(
             molecule=molecule_product,
-            refE=molecule_product.energy,
+            ref_energy=molecule_product.energy,
             opt_steps=100,
         )
 
