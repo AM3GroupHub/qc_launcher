@@ -87,11 +87,9 @@ class MACEDriver(BaseDriver):
         if self.atoms is not None:
             self.atoms.info["spin"] = self.atoms.info.get("multiplicity", 1)
 
-    def update_atoms(self, atoms: Optional[Atoms]) -> bool:
-        updated = super().update_atoms(atoms)
-        if updated:
-            self._add_spin_tag()
-        return updated
+    def update_atoms(self, atoms: Optional[Atoms]) -> None:
+        super().update_atoms(atoms)
+        self._add_spin_tag()
 
     def build_calc(self) -> MACECalculator:
         model_path = self.config["model_path"]

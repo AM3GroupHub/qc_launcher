@@ -320,6 +320,8 @@ class TBLiteDriver(BaseDriver):
 
     def run_kernel(self, atoms: Optional[Atoms] = None, use_cache: bool = True) -> Result:
         self.update_atoms(atoms)
+        if use_cache and self._res_cache is not None and not self._positions_changed():
+            return self._res_cache
         if self.xtb is None:
             self.xtb = self.build_xtb()
         else:
@@ -350,6 +352,7 @@ class TBLiteDriver(BaseDriver):
             converged = res is not None
         if use_cache and converged:
             self._res_cache = res
+            self._mark_positions()
         return res
 
     def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> tuple[float, str]:

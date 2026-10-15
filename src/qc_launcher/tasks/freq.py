@@ -8,6 +8,7 @@ from pyscf import symm
 from pyscf.hessian import thermo
 
 from qc_launcher.drivers import BaseDriver
+from qc_launcher.drivers.base_driver import convert_hessian
 from qc_launcher.utils.utils import dump_normal_mode, qrrho_thermo, write_pyvibms
 
 
@@ -39,7 +40,7 @@ def run_freq(
 
     # save hessian
     if save_hess:
-        hess_ = driver._convert_hessian_format(hessian, hess_format="ase")
+        hess_ = convert_hessian(hessian, len(driver.atoms), "ase")
         np.savetxt(f"{filename}_hess.txt", hess_)
 
     # vibrational analysis

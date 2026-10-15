@@ -1,4 +1,9 @@
+"""Abstract driver interface shared by all backends, plus the unit helpers they rely on."""
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from types import SimpleNamespace
 from typing import Literal, Optional
 
 import numpy as np
@@ -6,272 +11,181 @@ from ase import Atoms
 from ase.calculators.calculator import Calculator
 from ase.units import Bohr, Hartree
 
+HessianFormat = Literal["pyscf", "ase"]
+
+ENERGY_TO_EV = {"eV": 1.0, "Eh": Hartree}
+FORCES_TO_EV_ANG = {"eV/Ang": 1.0, "Eh/Bohr": Hartree / Bohr}
+HESSIAN_AU_TO_ASE = Hartree / Bohr**2  # Eh/Bohr^2 -> eV/Ang^2
+
+
+def to_ev(value: float, unit: str) -> float:
+    """Convert an energy given in ``unit`` ('eV' or 'Eh') to eV."""
+    try:
+        return value * ENERGY_TO_EV[unit]
+    except KeyError:
+        raise ValueError(f"Invalid energy unit '{unit}'. Use 'eV' or 'Eh'.") from None
+
+
+def to_ev_per_ang(forces: np.ndarray, unit: str) -> np.ndarray:
+    """Convert forces given in ``unit`` ('eV/Ang' or 'Eh/Bohr') to eV/Ang."""
+    try:
+        return np.asarray(forces) * FORCES_TO_EV_ANG[unit]
+    except KeyError:
+        raise ValueError(f"Invalid forces unit '{unit}'. Use 'eV/Ang' or 'Eh/Bohr'.") from None
+
+
+def convert_hessian(hessian: np.ndarray, natm: int, hess_format: HessianFormat) -> np.ndarray:
+    """Convert between the two Hessian layouts used in this package.
+
+    ``"ase"`` is ``(3N, 3N)`` in eV/Ang^2; ``"pyscf"`` is ``(N, N, 3, 3)`` in Eh/Bohr^2. The input layout
+    is inferred from the shape, so passing a Hessian that is already in ``hess_format`` returns it as is.
+    """
+    if hess_format not in ("pyscf", "ase"):
+        raise ValueError("Invalid hess_format. Use 'pyscf' or 'ase'.")
+    hessian = np.asarray(hessian)
+    is_pyscf = hessian.shape == (natm, natm, 3, 3)
+    is_ase = hessian.shape == (3 * natm, 3 * natm)
+    if not (is_pyscf or is_ase):
+        raise ValueError(f"Invalid Hessian shape {hessian.shape} for {natm} atoms.")
+    if hess_format == "pyscf":
+        if is_pyscf:
+            return hessian
+        return hessian.reshape(natm, 3, natm, 3).transpose(0, 2, 1, 3) / HESSIAN_AU_TO_ASE
+    if is_ase:
+        return hessian
+    return hessian.transpose(0, 2, 1, 3).reshape(3 * natm, 3 * natm) * HESSIAN_AU_TO_ASE
+
+
+def dummy_pyscf_mf(atoms: Atoms, e_tot_eh: float) -> SimpleNamespace:
+    """A stand-in for a PySCF mean-field object exposing only ``mol`` and ``e_tot`` (for thermochemistry)."""
+    from pyscf import gto
+
+    mol = gto.M(
+        atom=[(symbol, position) for symbol, position in zip(atoms.get_chemical_symbols(), atoms.get_positions())],
+        charge=atoms.info.get("charge", 0),
+        spin=atoms.info.get("multiplicity", 1) - 1,
+    )
+    return SimpleNamespace(mol=mol, e_tot=e_tot_eh)
+
 
 class BaseDriver(ABC):
-    def __init__(self, atoms: Optional[Atoms], config: dict, verbose: bool = True):
-        """
-        Initialize the base driver.
+    """A backend that evaluates energies, forces and Hessians for one molecular system.
 
-        Args:
-            atoms: ASE Atoms object.
-            config: Configuration dictionary containing driver parameters.
-        """
+    Subclasses implement ``_compute_*_impl`` returning values together with their unit, and
+    ``to_ase_calc`` / ``to_pyscf_mf`` adapters. The public ``compute_*`` methods convert units,
+    log, and cache Hessians by geometry.
+    """
+
+    def __init__(self, atoms: Optional[Atoms], config: dict, verbose: bool = True):
         self.atoms: Optional[Atoms] = atoms
         self.config = config
         self.verbose = verbose
-        self._hessian_cache = {}
+        self._hessian_cache: dict[bytes, np.ndarray] = {}
+        self._last_positions: Optional[np.ndarray] = None
 
     def log(self, message: str) -> None:
-        """Utility method for printing messages based on verbosity."""
         if self.verbose:
             print(message)
 
-    def update_atoms(self, atoms: Optional[Atoms]) -> bool:
-        """
-        Update the internal state with new atomic positions.
+    # ------------------------------------------------------------------ structure bookkeeping
+    def update_atoms(self, atoms: Optional[Atoms]) -> None:
+        """Adopt ``atoms`` as the current structure; ``None`` keeps the current one.
 
-        This is software-specific and must be implemented by each subclass.
-
-        Args:
-            atoms: ASE Atoms object with updated positions.
-        Returns:
-            True if positions were updated, else False if positions are the same and no update was needed.
+        Species, charge and multiplicity must not change (create a new driver for that). Whether the
+        *positions* changed is tracked separately by :meth:`_positions_changed`, because callers such as
+        Sella mutate the very same ``Atoms`` object in place between calls.
         """
-        if self.atoms is None:
-            assert atoms is not None, "Current atoms is None, new atoms cannot be None."
-            self.atoms = atoms
-            return True
         if atoms is None:
-            return False  # new atoms is None, no update needed
-        # check if atomic numbers have changed
-        new_numbers = atoms.get_atomic_numbers()
-        curr_numbers = self.atoms.get_atomic_numbers()
-        if not np.array_equal(new_numbers, curr_numbers):
-            raise ValueError("Atomic numbers cannot be changed. Please create a new driver instance.")
-        new_charge = atoms.info.get("charge", 0)
-        curr_charge = self.atoms.info.get("charge", 0)
-        if new_charge != curr_charge:
-            raise ValueError("Charge cannot be changed. Please create a new driver instance.")
-        new_multiplicity = atoms.info.get("multiplicity", 1)
-        curr_multiplicity = self.atoms.info.get("multiplicity", 1)
-        if new_multiplicity != curr_multiplicity:
-            raise ValueError("Multiplicity cannot be changed. Please create a new driver instance.")
-        new_pos = atoms.get_positions()
-        curr_pos = self.atoms.get_positions()
-        if np.allclose(new_pos, curr_pos, atol=1e-5):
-            return False  # positions are the same, no update needed
+            if self.atoms is None:
+                raise ValueError("No structure available: pass an Atoms object.")
+            return
+        if self.atoms is not None and self.atoms is not atoms:
+            if not np.array_equal(atoms.get_atomic_numbers(), self.atoms.get_atomic_numbers()):
+                raise ValueError("Atomic numbers cannot be changed. Please create a new driver instance.")
+            for key, default in (("charge", 0), ("multiplicity", 1)):
+                if atoms.info.get(key, default) != self.atoms.info.get(key, default):
+                    raise ValueError(f"{key.capitalize()} cannot be changed. Please create a new driver instance.")
         self.atoms = atoms
-        return True
 
+    def _positions_changed(self, atol: float = 1e-8) -> bool:
+        """True unless the current positions equal the snapshot taken by :meth:`_mark_positions`."""
+        if self.atoms is None:
+            raise ValueError("No structure available.")
+        if self._last_positions is None:
+            return True
+        positions = self.atoms.get_positions()
+        return positions.shape != self._last_positions.shape or not np.allclose(
+            positions, self._last_positions, rtol=0.0, atol=atol
+        )
+
+    def _mark_positions(self) -> None:
+        """Snapshot the current positions as the geometry the backend state corresponds to."""
+        self._last_positions = self.atoms.get_positions().copy()
+
+    def clear_cache(self) -> None:
+        self._hessian_cache.clear()
+        self._last_positions = None
+
+    # ------------------------------------------------------------------ adapters
     @abstractmethod
     def to_ase_calc(self) -> Calculator:
-        """
-        Convert the internal method/model to an ASE Calculator if possible.
-
-        This is software-specific and must be implemented by each subclass.
-
-        Returns:
-            An ASE Calculator object if conversion is possible, otherwise None.
-        """
-        pass
+        """An ASE calculator backed by this driver."""
 
     @abstractmethod
     def to_pyscf_mf(self):
-        """
-        Convert the internal method/model to a PySCF SCF object if possible.
+        """A PySCF mean-field object (or a :func:`dummy_pyscf_mf` stand-in) for thermochemistry."""
 
-        This is software-specific and must be implemented by each subclass.
-
-        Returns:
-            A PySCF SCF object if conversion is possible, otherwise None.
-        """
-        pass
-
+    # ------------------------------------------------------------------ backend implementations
     @abstractmethod
     def _compute_energy_impl(self, atoms: Optional[Atoms]) -> tuple[float, str]:
-        """
-        Compute the potential energy of the system.
-
-        This is software-specific and must be implemented by each subclass.
-
-        Args:
-            atoms: ASE Atoms object. If None, use the internal Atoms object.
-        Returns:
-            Potential energy.
-            String indicating the unit of the returned energy ('eV' or 'Eh').
-        """
-        pass
+        """Return (energy, unit) with unit 'eV' or 'Eh'."""
 
     @abstractmethod
     def _compute_forces_impl(self, atoms: Optional[Atoms]) -> tuple[np.ndarray, str]:
-        """
-        Compute the forces on each atom.
-
-        This is software-specific and must be implemented by each subclass.
-
-        Args:
-            atoms: ASE Atoms object. If None, use the internal Atoms object.
-        Returns:
-            Forces on each atom in eV/Angstrom, shape (N, 3).
-            String indicating the unit of the returned forces ('eV/Ang' or 'Eh/Bohr').
-        """
-        pass
+        """Return (forces of shape (N, 3), unit) with unit 'eV/Ang' or 'Eh/Bohr'."""
 
     @abstractmethod
-    def _compute_hessian_impl(
-        self,
-        atoms: Optional[Atoms],
-    ) -> np.ndarray:
-        """
-        Compute the Hessian matrix.
+    def _compute_hessian_impl(self, atoms: Optional[Atoms]) -> np.ndarray:
+        """Return the Hessian in either layout accepted by :func:`convert_hessian`."""
 
-        This is software-specific and must be implemented by each subclass.
-
-        Args:
-            atoms: ASE Atoms object.
-
-        Returns:
-            Hessian matrix, pyscf format (N, N, 3, 3) in a.u., or ase format (3N, 3N) in eV/Angstrom^2.
-        """
-        pass
-
+    # ------------------------------------------------------------------ public API
     def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
-        """
-        Compute the potential energy of the system.
-
-        This is software-specific and must be implemented by each subclass.
-
-        Args:
-            atoms: ASE Atoms object. If None, use the internal Atoms object.
-        Returns:
-            Potential energy in eV.
-        """
-        energy, unit = self._compute_energy_impl(atoms)
-        if unit == "Eh":
-            energy_Eh = energy
-            energy_eV = energy * Hartree
-        elif unit == "eV":
-            energy_eV = energy
-            energy_Eh = energy / Hartree
-        else:
-            raise ValueError("Invalid energy unit. Use 'eV' or 'Eh'.")
-        self.log(f"Total Energy        [eV]: {energy_eV:16.10f}")
-        self.log(f"Total Energy        [Eh]: {energy_Eh:16.10f}")
-        return energy_eV
+        """Potential energy in eV."""
+        energy_ev = to_ev(*self._compute_energy_impl(atoms))
+        self.log(f"Total Energy        [eV]: {energy_ev:16.10f}")
+        self.log(f"Total Energy        [Eh]: {energy_ev / Hartree:16.10f}")
+        return energy_ev
 
     def compute_forces(self, atoms: Optional[Atoms] = None) -> np.ndarray:
-        """
-        Compute the forces on each atom.
-
-        This is software-specific and must be implemented by each subclass.
-
-        Args:
-            atoms: ASE Atoms object. If None, use the internal Atoms object.
-        Returns:
-            Forces on each atom in eV/Angstrom, shape (N, 3).
-        """
-        forces, unit = self._compute_forces_impl(atoms)
-        if unit == "Eh/Bohr":
-            forces_eV_Ang = forces * (Hartree / Bohr)
-        elif unit == "eV/Ang":
-            forces_eV_Ang = forces
-        else:
-            raise ValueError("Invalid forces unit. Use 'eV/Ang' or 'Eh/Bohr'.")
-        # print forces table
+        """Forces in eV/Ang, shape (N, 3)."""
+        forces = to_ev_per_ang(*self._compute_forces_impl(atoms))
         self.log("Forces [eV/Angstrom]:")
-        for i, f in enumerate(forces_eV_Ang):
+        for i, f in enumerate(forces):
             self.log(f"{i:3d} {f[0]:12.6f} {f[1]:12.6f} {f[2]:12.6f}")
-        return forces_eV_Ang
+        return forces
 
     def compute_hessian(
         self,
         atoms: Optional[Atoms] = None,
         use_cache: bool = True,
-        hess_format: Literal["pyscf", "ase"] = "ase",
+        hess_format: HessianFormat = "ase",
     ) -> np.ndarray:
-        """
-        Compute the Hessian matrix with optional caching.
+        """Hessian in ``hess_format``; cached per geometry (positions rounded to 1e-4 Ang).
 
-        Args:
-            atoms: ASE Atoms object.
-            use_cache: Whether to use cached Hessian if positions haven't changed.
-            hess_format: Desired format of the Hessian ('pyscf' or 'ase').
-
-        Returns:
-            Hessian matrix in the specified format.
+        The returned array is always a private copy, so callers may modify it freely.
         """
-        if hess_format not in {"pyscf", "ase"}:
+        if hess_format not in ("pyscf", "ase"):
             raise ValueError("Invalid hess_format. Use 'pyscf' or 'ase'.")
         atoms = self.atoms if atoms is None else atoms
-        positions = atoms.get_positions()
-        cache_key = self._get_cache_key(positions)
-
-        # Check cache
-        if use_cache and cache_key in self._hessian_cache:
-            cached = self._hessian_cache[cache_key]
-            return self._convert_hessian_format(cached, hess_format)
-
-        # Compute Hessian
-        hessian = self._compute_hessian_impl(atoms)
-        hessian = self._convert_hessian_format(hessian, hess_format)
-
-        # Cache the result
+        natm = len(atoms)
+        key = self._cache_key(atoms.get_positions())
+        if use_cache and key in self._hessian_cache:
+            return convert_hessian(self._hessian_cache[key], natm, hess_format).copy()
+        hessian = convert_hessian(self._compute_hessian_impl(atoms), natm, hess_format)
         if use_cache:
-            self._hessian_cache[cache_key] = hessian
-
+            self._hessian_cache[key] = hessian.copy()
         return hessian
 
-    def dump_extra_results(self) -> dict:
-        """
-        Dump any extra results from the driver that are not covered by energy, forces, or Hessian.
-
-        This can be overridden by subclasses to provide additional information.
-
-        Returns:
-            A dictionary of extra results.
-        """
-        return {}
-
-    def clear_cache(self):
-        """Clear all cached data."""
-        self._hessian_cache.clear()
-
-    def _get_cache_key(self, positions: np.ndarray, tolerance: float = 1e-4) -> str:
-        """
-        Generate a cache key for the given positions.
-
-        Args:
-            positions: Atomic positions.
-            tolerance: Tolerance for position comparison.
-
-        Returns:
-            Cache key string.
-        """
-        # Round positions to avoid floating point comparison issues
-        rounded = np.round(positions / tolerance).astype(int)
-        return str(hash(rounded.tobytes()))
-
-    def _convert_hessian_format(
-        self,
-        hessian: np.ndarray,
-        hess_format: Literal["pyscf", "ase"],
-    ) -> np.ndarray:
-        natm = len(self.atoms)
-        if hess_format == "pyscf":
-            if hessian.shape == (natm, natm, 3, 3):
-                return hessian
-            elif hessian.shape == (3 * natm, 3 * natm):
-                hessian = hessian.reshape(natm, 3, natm, 3).transpose(0, 2, 1, 3)
-                return hessian * (Bohr**2 / Hartree)  # convert to a.u.
-            else:
-                raise ValueError("Invalid Hessian shape")
-        elif hess_format == "ase":
-            if hessian.shape == (3 * natm, 3 * natm):
-                return hessian
-            elif hessian.shape == (natm, natm, 3, 3):
-                hessian = hessian.transpose(0, 2, 1, 3).reshape(3 * natm, 3 * natm)
-                return hessian * (Hartree / Bohr**2)  # convert to eV/Angstrom^2
-            else:
-                raise ValueError("Invalid Hessian shape")
-
-        raise ValueError("Invalid hess_format. Use 'pyscf' or 'ase'.")
+    @staticmethod
+    def _cache_key(positions: np.ndarray, tolerance: float = 1e-4) -> bytes:
+        return np.round(np.asarray(positions) / tolerance).astype(np.int64).tobytes()

@@ -295,13 +295,13 @@ class PySCFDriver(BaseDriver):
         """
         run PySCF kernel to compute energy, with optional caching of density matrix for faster convergence in subsequent calls.
         """
-        updated = self.update_atoms(atoms)
+        self.update_atoms(atoms)
         # lazy build method
         if self.method is None:
             self.method = self.build_method()
 
-        if not updated and self.method.converged:
-            # positions are the same and SCF already converged, no need to rerun
+        if not self._positions_changed() and self.method.converged:
+            # SCF already converged at exactly these positions, no need to rerun
             return self.method.e_tot
 
         # update molecule geometry
@@ -321,6 +321,12 @@ class PySCFDriver(BaseDriver):
                 self.log("SOSCF converged")
                 self.method.mo_coeff = newton_method.mo_coeff
                 self.method.mo_occ = newton_method.mo_occ
+                self.method.e_tot = newton_method.e_tot
+                self.method.converged = True
+        if converged:
+            self._mark_positions()
+        else:
+            self._last_positions = None
         if use_cache:  # save new density matrix to cache
             self._dm_cache = self.method.make_rdm1()
 
@@ -337,10 +343,7 @@ class PySCFDriver(BaseDriver):
         )
 
     def to_pyscf_mf(self):
-        if self.method is None:
-            self.method = self.build_method()
-        if not self.method.converged:
-            self.run_kernel(use_cache=False)  # run SCF to ensure method is converged before returning
+        self.run_kernel()  # no-op when the SCF is already converged at the current positions
         return self.method
 
     def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> tuple[float, str]:
