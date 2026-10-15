@@ -1,162 +1,96 @@
-from types import SimpleNamespace
-from typing import Optional
+"""MACE driver (mace-torch), with an optional nvalchemiops neighbour list."""
+
+from __future__ import annotations
+
+import importlib.util
 
 import numpy as np
 import torch
 from ase import Atoms
-from ase.units import Hartree
+from mace.calculators import MACECalculator, mace_mp, mace_omol
 
-try:
+from .calc_driver import CalculatorDriver
+
+NEIGHBOR_LISTS = ("mace", "nvalchemi")
+
+
+def nvalchemi_neighborhood(
+    positions: np.ndarray,
+    cutoff: float,
+    pbc: tuple[bool, bool, bool] | None = None,
+    cell: np.ndarray | None = None,
+    true_self_interaction: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Drop-in replacement for ``mace.data.neighborhood.get_neighborhood`` backed by nvalchemiops.
+
+    Returns ``(edge_index, shifts, unit_shifts, cell)`` with the same conventions as MACE: shifts are
+    ``unit_shifts @ cell`` and the cell is extended along non-periodic directions.
+    """
     from nvalchemiops.torch.neighbors import neighbor_list
 
-    NVALCHEMI_AVAILABLE = True
-except ImportError:
-    NVALCHEMI_AVAILABLE = False
-if NVALCHEMI_AVAILABLE:
-
-    def nv_get_neighborhood(
-        positions: np.ndarray,
-        cutoff: float,
-        pbc: Optional[tuple[bool, bool, bool]] = None,
-        cell: Optional[np.ndarray] = None,
-        true_self_interaction=False,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        positions_tensor = torch.from_numpy(positions).float()  # [num_positions, 3]
-        cell_tensor = torch.from_numpy(cell).float() if cell is not None else None
-        pbc_tensor = torch.tensor(pbc, dtype=torch.bool) if pbc is not None else torch.zeros(3, dtype=torch.bool)
-        if torch.any(pbc_tensor):
-            edge_index_tensor, _, unit_shifts_tensor = neighbor_list(
-                positions=positions_tensor,
-                cutoff=cutoff,
-                cell=cell_tensor,
-                pbc=pbc_tensor,
-                return_neighbor_list=True,
-            )
-            shifts_tensor = torch.dot(unit_shifts_tensor, cell_tensor)  # [n_edges, 3]
-        else:
-            edge_index_tensor, _ = neighbor_list(
-                positions=positions_tensor,
-                cutoff=cutoff,
-                cell=None,
-                pbc=None,
-                return_neighbor_list=True,
-            )
-            unit_shifts_tensor = torch.zeros(edge_index_tensor.shape[1], 3, dtype=torch.int32)  # [n_edges, 3]
-            shifts_tensor = torch.zeros_like(unit_shifts_tensor, dtype=torch.float)  # [n_edges, 3]
-        # copy from original get_neighborhood
-        pbc_x = pbc[0]
-        pbc_y = pbc[1]
-        pbc_z = pbc[2]
-        identity = np.identity(3, dtype=float)
-        max_positions = np.max(np.absolute(positions)) + 1
-        # Extend cell in non-periodic directions
-        # For models with more than 5 layers, the multiplicative constant needs to be increased.
-        # temp_cell = np.copy(cell)
-        if not pbc_x:
-            cell[0, :] = max_positions * 5 * cutoff * identity[0, :]
-        if not pbc_y:
-            cell[1, :] = max_positions * 5 * cutoff * identity[1, :]
-        if not pbc_z:
-            cell[2, :] = max_positions * 5 * cutoff * identity[2, :]
-
-        return edge_index_tensor.numpy(), shifts_tensor.numpy(), unit_shifts_tensor.numpy(), cell
-
-    import mace.data.atomic_data
-
-    mace.data.atomic_data.get_neighborhood = nv_get_neighborhood
-
-from mace.calculators import MACECalculator, mace_mp, mace_omol
-from pyscf import gto
-
-from .base_driver import BaseDriver
+    pbc = (False, False, False) if pbc is None else tuple(bool(p) for p in pbc)
+    cell = np.identity(3) if cell is None or not np.any(cell) else np.array(cell, dtype=float)
+    positions_t = torch.as_tensor(np.asarray(positions), dtype=torch.float64)
+    if any(pbc):
+        cell_t = torch.as_tensor(cell, dtype=positions_t.dtype)
+        edge_index, _, unit_shifts = neighbor_list(
+            positions=positions_t, cutoff=cutoff, cell=cell_t, pbc=torch.tensor(pbc), return_neighbor_list=True
+        )
+        shifts = unit_shifts.to(positions_t.dtype) @ cell_t
+    else:
+        edge_index, _ = neighbor_list(positions=positions_t, cutoff=cutoff, return_neighbor_list=True)
+        unit_shifts = torch.zeros(edge_index.shape[1], 3, dtype=torch.int32)
+        shifts = torch.zeros(edge_index.shape[1], 3, dtype=positions_t.dtype)
+    # extend the cell in non-periodic directions, as MACE does
+    max_positions = np.max(np.abs(positions)) + 1
+    for axis in range(3):
+        if not pbc[axis]:
+            cell[axis] = 0.0
+            cell[axis, axis] = max_positions * 5 * cutoff
+    return edge_index.numpy(), shifts.numpy(), unit_shifts.numpy(), cell
 
 
-class MACEDriver(BaseDriver):
-    def __init__(
-        self,
-        atoms: Atoms,
-        config: dict,
-        **kwargs,
-    ):
-        super().__init__(atoms=atoms, config=config, **kwargs)
-        self.calc: MACECalculator = None
-        self._add_spin_tag()
+def set_neighbor_list(kind: str) -> None:
+    """Select the neighbour-list implementation MACE uses process-wide ('mace' or 'nvalchemi')."""
+    import mace.data.atomic_data as atomic_data
+    import mace.data.neighborhood as neighborhood
 
-    def _add_spin_tag(self):
-        # the tag of "multiplicity" in MACE is `spin`, which is different from the `spin` in pyscf
-        if self.atoms is not None:
-            self.atoms.info["spin"] = self.atoms.info.get("multiplicity", 1)
+    if kind == "nvalchemi":
+        atomic_data.get_neighborhood = nvalchemi_neighborhood
+    elif kind == "mace":
+        atomic_data.get_neighborhood = neighborhood.get_neighborhood
+    else:
+        raise ValueError(f"Unsupported neighbor_list '{kind}'. Use one of {NEIGHBOR_LISTS}.")
 
-    def update_atoms(self, atoms: Optional[Atoms]) -> None:
-        super().update_atoms(atoms)
-        self._add_spin_tag()
+
+class MACEDriver(CalculatorDriver):
+    """Config keys (defaults): ``model_path`` (required), ``model_type`` ('omol' | 'mp'), ``device`` (auto),
+    ``precision`` ('float64'), ``head`` / ``dispersion`` / ``dispersion_xc`` / ``damping`` (mp models only),
+    ``neighbor_list`` ('nvalchemi' when nvalchemiops is installed, else 'mace').
+    """
 
     def build_calc(self) -> MACECalculator:
+        default_nlist = "nvalchemi" if importlib.util.find_spec("nvalchemiops") is not None else "mace"
+        set_neighbor_list(self.config.get("neighbor_list", default_nlist))
         model_path = self.config["model_path"]
-        device = self.config.get("device", None)
+        device = self.resolve_device(self.config)
         precision = self.config.get("precision", "float64")
-        if device is None:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
         model_type = self.config.get("model_type", "omol")
-        head = self.config.get("head", None)  # only for mp models
         if model_type == "omol":
             return mace_omol(model=model_path, device=device, default_dtype=precision)
-        elif model_type == "mp":
-            dispersion = self.config.get("dispersion", False)
-            dispersion_xc = self.config.get("dispersion_xc", "pbe")
-            damping = self.config.get("damping", "bj")
+        if model_type == "mp":
             return mace_mp(
                 model=model_path,
                 device=device,
                 default_dtype=precision,
-                head=head,
-                dispersion=dispersion,
-                dispersion_xc=dispersion_xc,
-                damping=damping,
+                head=self.config.get("head"),
+                dispersion=self.config.get("dispersion", False),
+                dispersion_xc=self.config.get("dispersion_xc", "pbe"),
+                damping=self.config.get("damping", "bj"),
             )
-        else:
-            raise ValueError(f"Unsupported model type: {model_type}")
+        raise ValueError(f"Unsupported model_type '{model_type}'. Use 'omol' or 'mp'.")
 
-    def to_ase_calc(self) -> MACECalculator:
-        if self.calc is None:
-            self.calc = self.build_calc()
-        return self.calc
-
-    def to_pyscf_mf(self):
-        if self.atoms is None:
-            raise ValueError("Atoms must be provided to convert to pyscf mean-field object.")
-        mol = gto.M(
-            atom=[(symb, coord) for symb, coord in zip(self.atoms.get_chemical_symbols(), self.atoms.get_positions())],
-            charge=self.atoms.info.get("charge", 0),
-            spin=self.atoms.info.get("multiplicity", 1) - 1,
-        )
-        if self.calc is None:
-            self.calc = self.build_calc()
-        e_tot = self.calc.get_potential_energy(self.atoms) / Hartree  # convert from eV to Hartree
-        dummy_mf = SimpleNamespace(mol=mol, e_tot=e_tot)
-        return dummy_mf
-
-    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> tuple[float, str]:
-        if self.calc is None:
-            self.calc = self.build_calc()
-        self.update_atoms(atoms)
-        energy = self.calc.get_potential_energy(self.atoms)
-        return energy, "eV"
-
-    def _compute_forces_impl(self, atoms):
-        if self.calc is None:
-            self.calc = self.build_calc()
-        self.update_atoms(atoms)
-        forces = self.calc.get_forces(self.atoms)
-        return forces, "eV/Ang"
-
-    def _compute_hessian_impl(
-        self,
-        atoms: Optional[Atoms],
-    ) -> np.ndarray:
-        if self.calc is None:
-            self.calc = self.build_calc()
+    def _compute_hessian_impl(self, atoms: Atoms | None) -> np.ndarray:
         self.update_atoms(atoms)
         natm = len(self.atoms)
-        hessian = self.calc.get_hessian(self.atoms).reshape(natm * 3, natm * 3)
-        return hessian
+        return np.asarray(self.calc.get_hessian(self.atoms)).reshape(3 * natm, 3 * natm)

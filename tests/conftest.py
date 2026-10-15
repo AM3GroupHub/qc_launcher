@@ -41,12 +41,12 @@ def _model_path(kind: str) -> str:
     return path
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def mace_model_path() -> str:
     return _model_path("mace")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def uma_model_path() -> str:
     return _model_path("uma")
 
