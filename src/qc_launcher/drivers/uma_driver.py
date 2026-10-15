@@ -1,6 +1,6 @@
 import os
-from typing import Optional, Tuple
 from types import SimpleNamespace
+from typing import Optional
 
 import numpy as np
 import torch
@@ -68,14 +68,14 @@ class UMADriver(BaseDriver):
         dummy_mf = SimpleNamespace(mol=mol, e_tot=e_tot)
         return dummy_mf
 
-    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
+    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> tuple[float, str]:
         if self.calc is None:
             self.calc = self.build_calc()
         self.update_atoms(atoms)
         energy = self.calc.get_potential_energy(self.atoms)
         return energy, "eV"
-    
-    def _compute_forces_impl(self, atoms: Optional[Atoms] = None) -> Tuple[np.ndarray, str]:
+
+    def _compute_forces_impl(self, atoms: Optional[Atoms] = None) -> tuple[np.ndarray, str]:
         if self.calc is None:
             self.calc = self.build_calc()
         self.update_atoms(atoms)
@@ -107,7 +107,7 @@ class UMADriver(BaseDriver):
             if i + batch_size > len(data_list):
                 data_list_batch = data_list[i:]
             else:
-                data_list_batch = data_list[i:i+batch_size]
+                data_list_batch = data_list[i : i + batch_size]
             batch = data_list_collater(data_list_batch, otf_graph=True)
             pred = self.calc.predictor.predict(batch)
             batch_forces = pred["forces"].detach()
@@ -120,5 +120,5 @@ class UMADriver(BaseDriver):
                 idx = i * 3 + j
                 forces_plus = forces[2 * idx].flatten().cpu().numpy()
                 forces_minus = forces[2 * idx + 1].flatten().cpu().numpy()
-                hessian[:, idx] = (forces_minus - forces_plus) / (2 * eps) # forces is the negative graidents
+                hessian[:, idx] = (forces_minus - forces_plus) / (2 * eps)  # forces is the negative graidents
         return hessian

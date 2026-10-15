@@ -1,13 +1,13 @@
 import os
 import shutil
-from typing import Sequence
+from collections.abc import Sequence
 
-import numpy as np
 import ase.io
+import numpy as np
 from ase import Atoms
+from ase.calculators.singlepoint import SinglePointCalculator
 from ase.mep import AutoNEB
 from ase.optimize import FIRE
-from ase.calculators.singlepoint import SinglePointCalculator
 
 from qc_launcher.drivers.base_driver import BaseDriver
 

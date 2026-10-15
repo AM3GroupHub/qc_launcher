@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from importlib import import_module
 
-
 TASK_MODULES = {
     "run_sp": ".sp",
     "run_grad": ".sp",

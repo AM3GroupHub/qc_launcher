@@ -1,10 +1,10 @@
 import time
 
-import numpy as np
 import ase.io
+import numpy as np
 from ase import Atoms
-from ase.units import Hartree, Bohr
-from sella import Sella, Constraints
+from ase.units import Bohr, Hartree
+from sella import Constraints, Sella
 
 from qc_launcher.drivers import BaseDriver
 
@@ -12,7 +12,7 @@ from qc_launcher.drivers import BaseDriver
 def setup_constraints(atoms: Atoms, cons_dict: dict) -> Constraints:
     """
     Setup constraints for the atoms object.
-    
+
     Args:
         atoms: ASE Atoms object
         cons_dict: Dictionary containing constraint specifications with keys:
@@ -20,39 +20,23 @@ def setup_constraints(atoms: Atoms, cons_dict: dict) -> Constraints:
                    - "fix_bond": list of [atom_i, atom_j] pairs
                    - "fix_angle": list of [atom_i, atom_j, atom_k] triplets
                    - "fix_dihedral": list of [atom_i, atom_j, atom_k, atom_l] quartets
-    
+
     Returns:
         Constraints object or None if cons_dict is empty
     """
     if not cons_dict:
         return None
-    
+
     cons = Constraints(atoms)
-    
+
     # Define constraint types and their corresponding methods
     constraint_specs = {
-        "fix_translation": {
-            "method": "fix_translation",
-            "args_processor": lambda x: (x,),
-            "label": "translation"
-        },
-        "fix_bond": {
-            "method": "fix_bond",
-            "args_processor": lambda x: (tuple(x),),
-            "label": "bond"
-        },
-        "fix_angle": {
-            "method": "fix_angle",
-            "args_processor": lambda x: (tuple(x),),
-            "label": "angle"
-        },
-        "fix_dihedral": {
-            "method": "fix_dihedral",
-            "args_processor": lambda x: (tuple(x),),
-            "label": "dihedral"
-        }
+        "fix_translation": {"method": "fix_translation", "args_processor": lambda x: (x,), "label": "translation"},
+        "fix_bond": {"method": "fix_bond", "args_processor": lambda x: (tuple(x),), "label": "bond"},
+        "fix_angle": {"method": "fix_angle", "args_processor": lambda x: (tuple(x),), "label": "angle"},
+        "fix_dihedral": {"method": "fix_dihedral", "args_processor": lambda x: (tuple(x),), "label": "dihedral"},
     }
-    
+
     # Apply constraints
     for constraint_type, spec in constraint_specs.items():
         if constraint_type in cons_dict:
@@ -61,7 +45,7 @@ def setup_constraints(atoms: Atoms, cons_dict: dict) -> Constraints:
                 args = spec["args_processor"](item)
                 getattr(cons, spec["method"])(*args)
             print(f"Applied {spec['label']} constraints: {constraint_items}")
-    
+
     return cons
 
 
@@ -93,8 +77,12 @@ def run_opt(
     delta0 = float(config.get("delta0", 0.1))
     eta = float(config.get("eta", 1e-4))
     gamma = float(config.get("gamma", 0.1))
-    nsteps_per_diag = config.get("nsteps_per_diag", 3)  # calculate exact hessian every n steps, when approximate hessian has inaccurate number of imaginary frequencies
-    diag_every_n = config.get("diag_every_n", None)  # force calculation of exact hessian every n steps, regardless of the number of imaginary frequencies
+    nsteps_per_diag = config.get(
+        "nsteps_per_diag", 3
+    )  # calculate exact hessian every n steps, when approximate hessian has inaccurate number of imaginary frequencies
+    diag_every_n = config.get(
+        "diag_every_n", None
+    )  # force calculation of exact hessian every n steps, regardless of the number of imaginary frequencies
     # constraints
     cons_dict = config.get("constraints", {})
     cons = setup_constraints(atoms, cons_dict)
@@ -110,7 +98,10 @@ def run_opt(
 
     # set sella optimizer
     atoms.calc = driver.to_ase_calc()
-    hessian_func = lambda x: driver.compute_hessian(x, use_cache=True, hess_format="ase")
+
+    def hessian_func(x):
+        return driver.compute_hessian(x, use_cache=True, hess_format="ase")
+
     sella = Sella(
         atoms=atoms,
         trajectory=trajectory,
@@ -138,12 +129,14 @@ def run_opt(
         dmax = np.max(delta_pos)
         drms = np.sqrt(np.mean(delta_pos**2))
         cmax = np.linalg.norm(sella.pes.get_res())
-        if (delta_energy < ediff_criterion and
-            fmax < fmax_criterion and
-            frms < frms_criterion and
-            dmax < dmax_criterion and
-            drms < drms_criterion and
-            cmax < cmax_criterion):
+        if (
+            delta_energy < ediff_criterion
+            and fmax < fmax_criterion
+            and frms < frms_criterion
+            and dmax < dmax_criterion
+            and drms < drms_criterion
+            and cmax < cmax_criterion
+        ):
             print("Optimization converged!")
             break
         last_pos = atoms.get_positions().copy()
@@ -159,7 +152,7 @@ def run_opt(
 
     # save final structure
     ase.io.write(opt_outputfile, atoms, columns=["symbols", "positions"])
-    
+
     # record end time
     end_time = time.time()
     print(f"Optimization completed in {end_time - start_time:.2f} seconds.")

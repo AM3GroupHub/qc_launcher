@@ -1,8 +1,6 @@
-from typing import List, Tuple
-
+from pyscf import gto
 from rdkit import Chem
 from rdkit.Chem import rdDetermineBonds
-from pyscf import gto
 
 
 def rdkit_mol_from_pyscf(pyscf_mol: gto.Mole) -> Chem.Mol:
@@ -24,6 +22,7 @@ def rdkit_mol_from_pyscf(pyscf_mol: gto.Mole) -> Chem.Mol:
         rdDetermineBonds.DetermineBonds(rdkit_mol)
     except:  # use openbabel to parse xyz
         from openbabel import pybel
+
         # convert xyz string to sdf string
         pybel_mol = pybel.readstring("xyz", xyz_str)
         sdf_str = pybel_mol.write("sdf")
@@ -32,7 +31,7 @@ def rdkit_mol_from_pyscf(pyscf_mol: gto.Mole) -> Chem.Mol:
     return rdkit_mol
 
 
-def get_constraints_idx(rdkit_mol: Chem.Mol) ->  Tuple[List[int], List[List[int]]]:
+def get_constraints_idx(rdkit_mol: Chem.Mol) -> tuple[list[int], list[list[int]]]:
     """
     1. Get the indices for sum constraints during the second stage of RESP fitting.
     i.e., add the constraint to those atoms that not SP3/SP2 carbon and not hydrogen connected to these carbons.

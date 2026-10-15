@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable
 
 import ase.io
 import yaml
 from ase import Atoms
 
-from qc_launcher.utils.optional import is_missing_package, missing_optional_dependency
 from qc_launcher.drivers import get_driver
+from qc_launcher.utils.optional import is_missing_package, missing_optional_dependency
 
 
 def load_yaml_config(config_path: str) -> dict[str, Any]:
-    with open(config_path, "r", encoding="utf-8") as handle:
+    with open(config_path, encoding="utf-8") as handle:
         config = yaml.safe_load(handle)
     if not isinstance(config, dict):
         raise ValueError(f"Config file '{config_path}' must contain a top-level mapping.")
@@ -80,9 +80,7 @@ def normalize_task_config(config: dict[str, Any], task_name: str) -> dict[str, A
         return dict(task_setting)
     if isinstance(task_setting, bool) and task_setting:
         return {}
-    raise ValueError(
-        f"Invalid {task_name} configuration. Expected a mapping or `true`."
-    )
+    raise ValueError(f"Invalid {task_name} configuration. Expected a mapping or `true`.")
 
 
 def load_opt_runner() -> Callable[..., dict[str, Any]]:
@@ -102,20 +100,17 @@ def load_irc_runner() -> Callable[..., dict[str, Any]]:
         from qc_launcher.tasks.irc import run_irc
     except ModuleNotFoundError as exc:
         if is_missing_package(exc, "sella"):
-            raise ModuleNotFoundError(
-                "IRC tasks require `sella`. Install it in the runtime environment."
-            ) from exc
+            raise ModuleNotFoundError("IRC tasks require `sella`. Install it in the runtime environment.") from exc
         raise
     return run_irc
+
 
 def load_gsm_runner() -> Callable[..., dict[str, Any]]:
     try:
         from qc_launcher.tasks.gsm import run_gsm
     except ModuleNotFoundError as exc:
         if is_missing_package(exc, "pygsm"):
-            raise ModuleNotFoundError(
-                "GSM tasks require `pygsm`. Install it in the runtime environment."
-            ) from exc
+            raise ModuleNotFoundError("GSM tasks require `pygsm`. Install it in the runtime environment.") from exc
         raise
     return run_gsm
 
@@ -255,7 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     autoneb_parser = subparsers.add_parser("autoneb", help="Run AutoNEB workflow.")
     autoneb_parser.add_argument("config", help="Path to YAML configuration file.")
     autoneb_parser.set_defaults(handler=lambda args: launch_autoneb(args.config))
-    
+
     pysis_parser = subparsers.add_parser("pysis", help="Pass arguments through to pysisyphus.")
     pysis_parser.add_argument("config", help="Path to YAML configuration file.")
     pysis_parser.set_defaults(handler=lambda args: launch_pysis(args.config))

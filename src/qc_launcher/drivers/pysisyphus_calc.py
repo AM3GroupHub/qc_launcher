@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 import numpy as np
 from ase import Atoms
 from ase.units import Bohr, Hartree
@@ -23,19 +21,17 @@ from .driver_factory import get_driver
 
 class QCSisyphusCalc(Calculator):
     conf_key = "qc_launcher"
-    def __init__(
-        self,
-        driver: dict,
-        charge: int = None,
-        mult: int = None,
-        **kwargs
-    ) -> None:
+
+    def __init__(self, driver: dict, charge: int = None, mult: int = None, **kwargs) -> None:
         # load driver
         driver_config = dict(driver)
         driver_name = driver_config.pop("name")
         driver_obj = get_driver(
-            name=driver_name, atoms=None, config=driver_config, verbose=False,
-        ) 
+            name=driver_name,
+            atoms=None,
+            config=driver_config,
+            verbose=False,
+        )
         # read charge and multiplicity from driver.atoms.info, default to 0 and 1 if not present
         driver_info = {} if driver_obj.atoms is None else driver_obj.atoms.info
         charge = driver_info.get("charge", 0) if charge is None else charge
@@ -44,7 +40,7 @@ class QCSisyphusCalc(Calculator):
         super().__init__(charge=charge, mult=mult, **kwargs)
         self.driver = driver_obj
 
-    def prepare_atoms(self, atoms: List[str], coords: np.ndarray, **prepare_kwargs) -> Atoms:
+    def prepare_atoms(self, atoms: list[str], coords: np.ndarray, **prepare_kwargs) -> Atoms:
         symbols = [symbol.capitalize() for symbol in atoms]  # ensure symbols are capitalized
         ase_atoms = Atoms(
             symbols=symbols,
@@ -56,7 +52,7 @@ class QCSisyphusCalc(Calculator):
         ase_atoms.info["multiplicity"] = mult
         return ase_atoms
 
-    def get_energy(self, atoms: List[str], coords: np.ndarray, **prepare_kwargs) -> dict:
+    def get_energy(self, atoms: list[str], coords: np.ndarray, **prepare_kwargs) -> dict:
         ase_atoms = self.prepare_atoms(atoms, coords, **prepare_kwargs)
         energy, unit = self.driver._compute_energy_impl(ase_atoms)
         results = {}
@@ -68,7 +64,7 @@ class QCSisyphusCalc(Calculator):
             raise ValueError("Invalid energy unit. Use 'Eh' or 'eV'.")
         return results
 
-    def get_forces(self, atoms: List[str], coords: np.ndarray, **prepare_kwargs) -> np.ndarray:
+    def get_forces(self, atoms: list[str], coords: np.ndarray, **prepare_kwargs) -> np.ndarray:
         # energy is required when pysisyphus calls get_forces
         results = self.get_energy(atoms, coords, **prepare_kwargs)
         ase_atoms = self.prepare_atoms(atoms, coords, **prepare_kwargs)
@@ -81,7 +77,7 @@ class QCSisyphusCalc(Calculator):
             raise ValueError("Invalid forces unit. Use 'eV/Ang' or 'Eh/Bohr'.")
         return results
 
-    def get_hessian(self, atoms: List[str], coords: np.ndarray, **prepare_kwargs) -> np.ndarray:
+    def get_hessian(self, atoms: list[str], coords: np.ndarray, **prepare_kwargs) -> np.ndarray:
         # energy is required when pysisyphus calls get_hessian
         results = self.get_energy(atoms, coords, **prepare_kwargs)
         ase_atoms = self.prepare_atoms(atoms, coords, **prepare_kwargs)

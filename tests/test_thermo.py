@@ -24,9 +24,18 @@ C_CM = nist.LIGHT_SPEED_SI * 100.0
 FREQ_AU = FREQ_CM1 * C_CM / AU2HZ
 
 STUB = {
-    "S_elec": (0.0, "Eh/K"), "S_trans": (1.0e-5, "Eh/K"), "S_rot": (2.0e-5, "Eh/K"), "S_vib": (0.0, "Eh/K"),
-    "H_elec": (-1.0, "Eh"), "H_trans": (2.0e-3, "Eh"), "H_rot": (1.0e-3, "Eh"), "H_vib": (0.0, "Eh"),
-    "G_elec": (-1.0, "Eh"), "G_trans": (-1.0e-3, "Eh"), "G_rot": (-5.0e-3, "Eh"), "G_vib": (0.0, "Eh"),
+    "S_elec": (0.0, "Eh/K"),
+    "S_trans": (1.0e-5, "Eh/K"),
+    "S_rot": (2.0e-5, "Eh/K"),
+    "S_vib": (0.0, "Eh/K"),
+    "H_elec": (-1.0, "Eh"),
+    "H_trans": (2.0e-3, "Eh"),
+    "H_rot": (1.0e-3, "Eh"),
+    "H_vib": (0.0, "Eh"),
+    "G_elec": (-1.0, "Eh"),
+    "G_trans": (-1.0e-3, "Eh"),
+    "G_rot": (-5.0e-3, "Eh"),
+    "G_vib": (0.0, "Eh"),
     "G_tot": (0.0, "Eh"),
 }
 

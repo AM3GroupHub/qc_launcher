@@ -15,6 +15,5 @@ def missing_optional_dependency(
     package_label = extra_name if package_name is None else package_name
     install_command = f"pip install -e .[{extra_name}]" if install_hint is None else install_hint
     return ModuleNotFoundError(
-        f"{feature} requires optional dependency '{package_label}'. "
-        f"Install it with `{install_command}`."
+        f"{feature} requires optional dependency '{package_label}'. Install it with `{install_command}`."
     )

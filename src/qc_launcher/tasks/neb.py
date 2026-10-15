@@ -1,5 +1,5 @@
-import numpy as np
 import ase.io
+import numpy as np
 from ase.mep import NEB
 from ase.optimize import FIRE
 
@@ -32,7 +32,6 @@ def run_neb(
     interpolate_method: str = config.get("interpolate_method", "idpp")
     trajectory = config.get("trajectory", f"{filename}_neb.traj")
 
-
     if len(atoms_list) == 2:
         init_atoms, final_atoms = atoms_list[0], atoms_list[1]
         images = [init_atoms]
@@ -42,7 +41,9 @@ def run_neb(
         init_chain = True
     elif len(atoms_list) > 2:
         if len(atoms_list) != num_images + 2:
-            raise ValueError(f"Number of images in input ({len(atoms_list)}) does not match num_images + 2 ({num_images + 2}).")
+            raise ValueError(
+                f"Number of images in input ({len(atoms_list)}) does not match num_images + 2 ({num_images + 2})."
+            )
         images = atoms_list
         init_chain = False
     else:
@@ -50,7 +51,7 @@ def run_neb(
 
     # get calc
     calc = driver.to_ase_calc()
-    
+
     # optimize terminal images first
     if not fixed_reactant:
         images[0].calc = calc
@@ -74,7 +75,7 @@ def run_neb(
     )
     if init_chain:
         neb.interpolate(interpolate_method)
-    
+
     # set up calculators for all images
     for image in images:
         image.calc = calc
@@ -90,15 +91,15 @@ def run_neb(
     if climb:
         print("Starting CI-NEB ...")
         neb.climb = True
-        converged = opt.run(fmax=fmax, steps=max_neb_steps-stage1_steps)
+        converged = opt.run(fmax=fmax, steps=max_neb_steps - stage1_steps)
     images = neb.images
-    
+
     # chekc convergence
     if converged:
         print("NEB optimization converged!")
     else:
         print("NEB optimization did not converge within the maximum number of steps.")
-    
+
     # save final images
     ase.io.write(f"{filename}_neb.xyz", images)
     # print energies of all images

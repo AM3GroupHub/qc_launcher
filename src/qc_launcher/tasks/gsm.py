@@ -4,10 +4,6 @@ from typing import Any
 
 import ase.io
 from ase import Atoms
-
-from qc_launcher.drivers.base_driver import BaseDriver
-
-
 from pygsm import (
     DEGSM,
     LBFGS,
@@ -22,6 +18,7 @@ from pygsm import (
 from pygsm.utils import output
 from pygsm.utils.elements import ElementData
 
+from qc_launcher.drivers.base_driver import BaseDriver
 
 # go_gsm rtype for each `ts_search` setting
 TS_SEARCH_RTYPE = {"none": 0, "climb": 1, "exact": 2}
@@ -75,7 +72,8 @@ def run_gsm(
     # read atoms
     if gsm_type == "DE_GSM":
         assert len(atoms_list) == 2, "DE_GSM requires exactly two geometries (initial and final)."
-        atoms_reactant: Atoms; atoms_product: Atoms
+        atoms_reactant: Atoms
+        atoms_product: Atoms
         atoms_reactant, atoms_product = atoms_list[0], atoms_list[1]
     elif gsm_type == "SE_GSM":
         assert len(atoms_list) == 1, "SE_GSM requires exactly one geometry (initial)."

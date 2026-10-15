@@ -1,18 +1,19 @@
 import os
 import sys
 from types import MethodType
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
-from pyscf import gto, lib, dft
-from pyscf.lib import GradScanner
-from pyscf.gto import charge, Mole
 from ase import Atoms
-from ase.units import Hartree, Bohr
 from ase.calculators.calculator import Calculator, all_changes
+from ase.units import Bohr, Hartree
+from pyscf import dft, gto, lib
+from pyscf.gto import Mole, charge
+from pyscf.lib import GradScanner
+
+from qc_launcher.utils.utils import read_pcm_eps
 
 from .base_driver import BaseDriver
-from qc_launcher.utils.utils import read_pcm_eps
 
 
 class PySCFCalculator(Calculator):
@@ -21,8 +22,10 @@ class PySCFCalculator(Calculator):
     This calculator uses PySCF to compute the energy and forces of a system.
     It can be used with various mean field methods provided by PySCF.
     """
+
     implemented_properties = ["energy", "forces"]
     default_parameters = {}
+
     def __init__(
         self,
         method,
@@ -41,7 +44,7 @@ class PySCFCalculator(Calculator):
     def set_max_unconverged_steps(self, tol: int = None):
         self.max_unconverged_steps = sys.maxsize if tol is None else tol
         self.num_unconverged = 0
-    
+
     def set(self, **kwargs):
         changed_parameters = Calculator.set(self, **kwargs)
         if changed_parameters:
@@ -50,14 +53,14 @@ class PySCFCalculator(Calculator):
     def calculate(
         self,
         atoms: Atoms = None,
-        properties=None, 
+        properties=None,
         system_changes=all_changes,
     ):
         if properties is None:
             properties = self.implemented_properties
-        
+
         Calculator.calculate(self, atoms, properties, system_changes)
-        
+
         mol: Mole = self.method.mol
         positions = atoms.get_positions()
         atomic_numbers = atoms.get_atomic_numbers()
@@ -66,9 +69,9 @@ class PySCFCalculator(Calculator):
             _atoms = positions
         else:
             _atoms = list(zip(atomic_numbers, positions))
-        
+
         mol.set_geom_(_atoms, unit="Angstrom")
-        
+
         energy, gradients = self.g_scanner(mol)
         if not self.g_scanner.converged and self.retry_soscf:
             # try SOSCF if not converged
@@ -104,14 +107,14 @@ class PySCFDriver(BaseDriver):
         self.method = None if atoms is None else self.build_method(atoms=atoms)
         self._dm_cache = None  # cache for density matrix
         self.retry_soscf = self.config.get("retry_soscf", False)
-    
+
     def _build_mf(self, atoms: Optional[Atoms] = None, config: Optional[dict] = None):
         """
         Build PySCF method from configuration or atoms.
-        
+
         Args:
             atoms: ASE Atoms object.
-            
+
         Returns:
             PySCF SCF method object.
         """
@@ -121,7 +124,7 @@ class PySCFDriver(BaseDriver):
         restricted: Optional[bool] = config.get("restricted", None)
         basis: str = config.get("basis", "def2-SVP")
         ecp: Optional[str] = config.get("ecp", None)
-        nlc: str = config.get("nlc", '')
+        nlc: str = config.get("nlc", "")
         disp: Optional[str] = config.get("disp", None)
         grids: Optional[dict] = config.get("grids", None)
         nlcgrids: Optional[dict] = config.get("nlcgrids", None)
@@ -189,11 +192,12 @@ class PySCFDriver(BaseDriver):
         if with_gpu:
             try:
                 import cupy
+
                 cupy.get_default_memory_pool().free_all_blocks()
                 mf = mf.to_gpu()
             except ImportError:
                 self.log("GPU support is not available. Proceeding with CPU.")
-    
+
         # solvation model
         if with_solvent:
             solvent = solvent
@@ -218,7 +222,9 @@ class PySCFDriver(BaseDriver):
                 elif "solvent" in solvent:
                     mf.with_solvent.solvent = solvent["solvent"]
                 else:
-                    raise ValueError("For SMD solvent, either 'solvent_descriptor' or 'solvent' must be specified in config")
+                    raise ValueError(
+                        "For SMD solvent, either 'solvent_descriptor' or 'solvent' must be specified in config"
+                    )
             else:
                 raise ValueError(f"Unknown solvent method: {solvent['method']}")
 
@@ -233,7 +239,8 @@ class PySCFDriver(BaseDriver):
 
     def build_method(self, atoms: Optional[Atoms] = None):
         if self.is_3c:
-            from gpu4pyscf.drivers.dft_3c_driver import parse_3c, gen_disp_fun
+            from gpu4pyscf.drivers.dft_3c_driver import gen_disp_fun, parse_3c
+
             xc = self.config.get("xc", "B973c").lower()
             xc = xc.replace("-3c", "3c")  # allow both "B973c" and "B97-3c"
             # modify config dictionary for 3c method
@@ -253,7 +260,8 @@ class PySCFDriver(BaseDriver):
 
     def build_gradient_method(self):
         if self.is_3c:
-            from gpu4pyscf.drivers.dft_3c_driver import parse_3c, gen_disp_grad_fun
+            from gpu4pyscf.drivers.dft_3c_driver import gen_disp_grad_fun, parse_3c
+
             xc = self.config.get("xc", "B973c").lower()
             xc = xc.replace("-3c", "3c")  # allow both "B973c" and "B97-3c"
             _, _, _, _, (xc_disp, disp), xc_gcp = parse_3c(xc)
@@ -264,7 +272,8 @@ class PySCFDriver(BaseDriver):
 
     def build_hessian_method(self):
         if self.is_3c:
-            from gpu4pyscf.drivers.dft_3c_driver import parse_3c, gen_disp_hess_fun
+            from gpu4pyscf.drivers.dft_3c_driver import gen_disp_hess_fun, parse_3c
+
             xc = self.config.get("xc", "B973c").lower()
             xc = xc.replace("-3c", "3c")  # allow both "B973c" and "B97-3c"
             _, _, _, _, (xc_disp, disp), xc_gcp = parse_3c(xc)
@@ -289,11 +298,11 @@ class PySCFDriver(BaseDriver):
         # lazy build method
         if self.method is None:
             self.method = self.build_method()
-        
+
         if not updated and self.method.converged:
             # positions are the same and SCF already converged, no need to rerun
             return self.method.e_tot
-        
+
         # update molecule geometry
         mol = self.method.mol.set_geom_(self.atoms.get_positions(), unit="Angstrom", inplace=False)
         self.method.reset(mol)  # reset method with new molecule geometry
@@ -313,14 +322,15 @@ class PySCFDriver(BaseDriver):
                 self.method.mo_occ = newton_method.mo_occ
         if use_cache:  # save new density matrix to cache
             self._dm_cache = self.method.make_rdm1()
-        
+
         return energy  # in Hartree
 
     def to_ase_calc(self):
         gradient_method = self.build_gradient_method()
         g_scanner = gradient_method.as_scanner()
         return PySCFCalculator(
-            method=self.method, g_scanner=g_scanner,
+            method=self.method,
+            g_scanner=g_scanner,
             max_unconverged_steps=self.config.get("max_unconverged_steps", None),
             retry_soscf=self.retry_soscf,
         )
@@ -332,12 +342,12 @@ class PySCFDriver(BaseDriver):
             self.run_kernel(use_cache=False)  # run SCF to ensure method is converged before returning
         return self.method
 
-    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
+    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> tuple[float, str]:
         e_tot = self.run_kernel(atoms=atoms, use_cache=True)
         scf_summary = self.method.scf_summary
-        e1 = scf_summary.get("e1", 0.0)        # one-electron energy
+        e1 = scf_summary.get("e1", 0.0)  # one-electron energy
         e_coul = scf_summary.get("coul", 0.0)  # Coulomb energy
-        e_xc = scf_summary.get("exc", 0.0)     # exchange-correlation energy
+        e_xc = scf_summary.get("exc", 0.0)  # exchange-correlation energy
         e_disp = scf_summary.get("disp", 0.0)  # dispersion energy
         e_solvent = scf_summary.get("solvent", 0.0)  # solvent energy
         # log results
@@ -360,16 +370,16 @@ class PySCFDriver(BaseDriver):
             na, nb = self.method.nelec
             self.log(f"LUMO Alpha [Eh]: {mo_energy[0][na]:12.6f}")
             self.log(f"LUMO Beta  [Eh]: {mo_energy[1][nb]:12.6f}")
-            self.log(f"HOMO Alpha [Eh]: {mo_energy[0][na-1]:12.6f}")
-            self.log(f"HOMO Beta  [Eh]: {mo_energy[1][nb-1]:12.6f}")
+            self.log(f"HOMO Alpha [Eh]: {mo_energy[0][na - 1]:12.6f}")
+            self.log(f"HOMO Beta  [Eh]: {mo_energy[1][nb - 1]:12.6f}")
         else:  # closed-shell
             mo_energy.sort()
             nocc = self.method.mol.nelectron // 2
             self.log(f"LUMO [Eh]: {mo_energy[nocc]:12.6f}")
-            self.log(f"HOMO [Eh]: {mo_energy[nocc-1]:12.6f}")
+            self.log(f"HOMO [Eh]: {mo_energy[nocc - 1]:12.6f}")
         return e_tot, "Eh"
 
-    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
+    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> tuple[np.ndarray, str]:
         self.run_kernel(atoms=atoms, use_cache=True)
         gradient_method = self.build_gradient_method()
         grad = gradient_method.kernel()
@@ -395,12 +405,14 @@ class PySCFDriver(BaseDriver):
             self.run_kernel(atoms=atoms, use_cache=True)
             hessian_method = self.build_hessian_method()
             hessian = hessian_method.kernel()
-        
+
         return hessian
-    
+
     def compute_resp(self, atoms: Optional[Atoms] = None) -> np.ndarray:
         from gpu4pyscf.pop import esp
+
         from qc_launcher.utils.topology import get_constraints_idx, rdkit_mol_from_pyscf
+
         self.run_kernel(atoms=atoms, use_cache=True)
         dm = self.method.make_rdm1()
         # stage 1: RESP fitting under weak hyperbolic penalty
@@ -412,7 +424,8 @@ class PySCFDriver(BaseDriver):
         for i in sum_constraints_idx:
             sum_constraints.append([q1[i], [i]])
         q2 = esp.resp_solve(
-            self.method.mol, dm,
+            self.method.mol,
+            dm,
             resp_a=1e-3,
             sum_constraints=sum_constraints,
             equal_constraints=equal_constraints,
@@ -420,6 +433,5 @@ class PySCFDriver(BaseDriver):
         # print RESP charges
         self.log("RESP charges [e]:")
         for i, charge in enumerate(q2):
-            self.log(f"{i+1:3d} {charge:16.10f}")
+            self.log(f"{i + 1:3d} {charge:16.10f}")
         return q2
-

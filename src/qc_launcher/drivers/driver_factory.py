@@ -1,8 +1,8 @@
 import importlib
+
 from ase import Atoms
 
 from .base_driver import BaseDriver
-
 
 _DRIVER_MAP = {
     "pyscf": (".pyscf_driver", "PySCFDriver"),
@@ -10,6 +10,7 @@ _DRIVER_MAP = {
     "uma": (".uma_driver", "UMADriver"),
     "tblite": (".tblite_driver", "TBLiteDriver"),
 }
+
 
 def get_driver(name: str, atoms: Atoms, config: dict, verbose: bool = True) -> BaseDriver:
     """

@@ -4,13 +4,11 @@ from typing import Union
 import numpy as np
 from ase.units import Bohr, _Nav
 from ase.units import m as meter
-
-from qc_launcher.drivers import BaseDriver
-
 from pyscf import symm
 from pyscf.hessian import thermo
 
-from qc_launcher.utils.utils import dump_normal_mode, write_pyvibms, qrrho_thermo
+from qc_launcher.drivers import BaseDriver
+from qc_launcher.utils.utils import dump_normal_mode, qrrho_thermo, write_pyvibms
 
 
 def run_freq(
@@ -23,7 +21,7 @@ def run_freq(
 
     # record the start time
     start_time = time.time()
-    
+
     # get config
     temperature = config.get("temperature", 298.15)
     pressure = config.get("pressure", 101325)
@@ -81,7 +79,7 @@ def run_freq(
             else:
                 b_av = tr_I / 3.0
             # convert from g/mol*Bohr^2 to kg*m^2
-            b_av *= (1e-3 * Bohr**2 / (_Nav * meter**2))
+            b_av *= 1e-3 * Bohr**2 / (_Nav * meter**2)
         elif isinstance(Bav, float):
             b_av = Bav
         else:
@@ -105,10 +103,7 @@ def run_freq(
         print(f"RRHO  G_tot [Eh]      : {thermo_info['G_tot'][0]:16.10f}")
         print(f"qRRHO G_tot [Eh]      : {qrrho_info['G_tot_qrrho'][0]:16.10f}")
         print("==================================================\n")
-        
 
-    write_pyvibms(vibfile, driver.atoms.get_chemical_symbols(),
-        freq_info["freq_wavenumber"], freq_info["norm_mode"]
-    )
+    write_pyvibms(vibfile, driver.atoms.get_chemical_symbols(), freq_info["freq_wavenumber"], freq_info["norm_mode"])
     end_time = time.time()
     print(f"Vibrational analysis completed in {end_time - start_time:.2f} seconds.")

@@ -1,7 +1,7 @@
 import time
 
 import ase.io
-from ase.units import Hartree, Bohr
+from ase.units import Bohr, Hartree
 from sella import IRC
 
 from qc_launcher.drivers import BaseDriver
@@ -14,7 +14,7 @@ def run_irc(
 ) -> None:
     # record the start time
     start_time = time.time()
-    
+
     atoms = driver.atoms
 
     # get config
@@ -32,7 +32,10 @@ def run_irc(
 
     # set sella IRC
     atoms.calc = driver.to_ase_calc()
-    hessian_func = lambda x: driver.compute_hessian(x, use_cache=True, hess_format="ase")
+
+    def hessian_func(x):
+        return driver.compute_hessian(x, use_cache=True, hess_format="ase")
+
     irc = IRC(
         atoms=atoms,
         trajectory=irc_trajectory,
@@ -67,12 +70,15 @@ def run_irc(
         converged = irc.run(fmax=fmax_criterion, steps=steps, direction="reverse")
         if not converged:
             Warning("Reverse IRC did not converge within the maximum number of steps.")
-        backward_traj = ase.io.Trajectory(irc_trajectory, "r")[traj_offset + 1:]  # read the new frames added by reverse IRC
-        irc_atoms_traj = [frame for frame in backward_traj[::-1]] + irc_atoms_traj  # reverse direction frames should be added before the forward direction frames
+        backward_traj = ase.io.Trajectory(irc_trajectory, "r")[
+            traj_offset + 1 :
+        ]  # read the new frames added by reverse IRC
+        irc_atoms_traj = [
+            frame for frame in backward_traj[::-1]
+        ] + irc_atoms_traj  # reverse direction frames should be added before the forward direction frames
 
     # save the full IRC trajectory
     ase.io.write(irc_output, irc_atoms_traj)
 
     end_time = time.time()
     print(f"IRC completed in {end_time - start_time:.2f} seconds.")
-

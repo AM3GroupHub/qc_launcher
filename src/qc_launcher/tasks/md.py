@@ -1,17 +1,17 @@
 import os
 import time
 
-import numpy as np
 import ase.io
-from ase.units import fs, Pascal, GPa
-from ase.optimize import FIRE, FIRE2, LBFGS
-from ase.md.verlet import VelocityVerlet
-from ase.md.langevin import Langevin
-from ase.md.nose_hoover_chain import NoseHooverChainNVT, IsotropicMTKNPT, MTKNPT
-from ase.md.melchionna import MelchionnaNPT
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary, ZeroRotation
-from ase.md.logger import MDLogger
+import numpy as np
 from ase.constraints import FixAtoms
+from ase.md.langevin import Langevin
+from ase.md.logger import MDLogger
+from ase.md.melchionna import MelchionnaNPT
+from ase.md.nose_hoover_chain import MTKNPT, IsotropicMTKNPT, NoseHooverChainNVT
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary, ZeroRotation
+from ase.md.verlet import VelocityVerlet
+from ase.optimize import FIRE, FIRE2, LBFGS
+from ase.units import GPa, Pascal, fs
 
 from qc_launcher.drivers import BaseDriver
 
@@ -23,7 +23,7 @@ def run_md(
 ) -> None:
     """
     Run molecular dynamics simulation using various ensembles (NVE, NVT, NPT).
-    
+
     Supports different integrators:
     - VelocityVerlet: NVE ensemble (constant energy)
     - Langevin: NVT ensemble (constant temperature with friction)
@@ -64,7 +64,9 @@ def run_md(
         # modify some parameters for resuming
         existing_steps = len(atoms_traj) * loginterval
         if existing_steps >= nsteps:
-            print(f"Existing trajectory already has {existing_steps} steps, which is >= requested {nsteps} steps. No need to run MD.")
+            print(
+                f"Existing trajectory already has {existing_steps} steps, which is >= requested {nsteps} steps. No need to run MD."
+            )
             return
         nsteps -= existing_steps  # only run the remaining steps
         append_trajectory = True  # append to existing trajectory
@@ -78,10 +80,10 @@ def run_md(
     if np.any(fix_indices):
         constraints = FixAtoms(indices=fix_indices)
         atoms.set_constraint(constraints)
-    
+
     # set calculator
     atoms.calc = driver.to_ase_calc()
-    
+
     # pre-minimize the structure before starting MD
     if minimize:
         if optimizer == "FIRE":
@@ -108,7 +110,7 @@ def run_md(
             timestep=timestep * fs,
             trajectory=trajectory,
             loginterval=loginterval,
-            append_trajectory=append_trajectory
+            append_trajectory=append_trajectory,
         )
     elif ensemble == "Langevin":
         friction = float(config.get("friction", 0.002))  # fs^-1
@@ -220,7 +222,7 @@ def run_md(
     )
     dyn.attach(md_logger, interval=loginterval)
     dyn.run(nsteps)
-    
+
     # record end time
     end_time = time.time()
     print(f"MD simulation completed in {end_time - start_time:.2f} seconds.")

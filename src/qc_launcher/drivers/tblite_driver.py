@@ -1,14 +1,14 @@
-from typing import Optional, List, Tuple
 from types import SimpleNamespace
+from typing import Optional
 
+import ase.calculators.calculator
 import numpy as np
 from ase import Atoms
-import ase.calculators.calculator
-from ase.units import Hartree, Bohr, kB
-from tblite.interface import Calculator, Result
+from ase.units import Bohr, Hartree, kB
+from pyscf import gto
 from tblite.ase import TBLite, _create_api_calculator
 from tblite.exceptions import TBLiteRuntimeError
-from pyscf import gto
+from tblite.interface import Calculator, Result
 
 from .base_driver import BaseDriver
 
@@ -24,27 +24,27 @@ def heating_annealing(
     Resolves xTB convergence issues using an electronic annealing strategy.
 
     Physical Context:
-    For systems with small HOMO-LUMO gaps or strong electronic correlation, SCF 
-    iterations often oscillate. Increasing the electronic temperature (Fermi smearing) 
-    broadens the orbital occupancy, which smoothens the energy landscape and aids 
-    convergence. This function recovers the target state by first finding a high-temperature 
-    converged state and then gradually "cooling" the system using the previous 
+    For systems with small HOMO-LUMO gaps or strong electronic correlation, SCF
+    iterations often oscillate. Increasing the electronic temperature (Fermi smearing)
+    broadens the orbital occupancy, which smoothens the energy landscape and aids
+    convergence. This function recovers the target state by first finding a high-temperature
+    converged state and then gradually "cooling" the system using the previous
     wavefunction as an initial guess (restart).
 
     Algorithm Logic:
     1. Linear Escalation (Heating Phase):
-       The algorithm searches upwards from the target temperature using `heating_step` 
-       until the first converged state is found at `temp_high`. If `max_temp` is 
+       The algorithm searches upwards from the target temperature using `heating_step`
+       until the first converged state is found at `temp_high`. If `max_temp` is
        reached without success, the process terminates.
 
     2. Adaptive Bisection Descent (Annealing Phase):
-       Using `temp_high` as a "safe anchor," the algorithm attempts to lower the 
-       temperature toward the target. 
-       - On Success: The anchor `temp_high` is updated to the current temperature, 
+       Using `temp_high` as a "safe anchor," the algorithm attempts to lower the
+       temperature toward the target.
+       - On Success: The anchor `temp_high` is updated to the current temperature,
          and the search continues further down.
-       - On Failure: The algorithm backtracks to the midpoint between the current 
+       - On Failure: The algorithm backtracks to the midpoint between the current
          failed temperature and the last successful anchor (`temp_high`).
-       - Convergence: The loop terminates successfully if the target temperature 
+       - Convergence: The loop terminates successfully if the target temperature
          is reached, or fails if the bisection gap becomes smaller than `annealing_step`.
 
     Args:
@@ -55,14 +55,14 @@ def heating_annealing(
         annealing_step: Minimum temperature resolution for the bisection search.
 
     Returns:
-        Optional[Result]: The converged Result object at the lowest reachable 
+        Optional[Result]: The converged Result object at the lowest reachable
         temperature (ideally `temp`), or None if no convergence was found.
     """
     kB_Hartree = kB / Hartree
     # escalate temperature until convergence or max_temp is reached
     temp_high = None
     conv_res = None
-    for _t in np.arange(temp+heating_step, max_temp+heating_step, heating_step):
+    for _t in np.arange(temp + heating_step, max_temp + heating_step, heating_step):
         t = _t.item()
         xtb.set("temperature", t * kB_Hartree)
         try:
@@ -74,7 +74,7 @@ def heating_annealing(
         except TBLiteRuntimeError:
             print(f"Heating: failed to converge at {t:.2f} K.")
             continue
-    
+
     if conv_res is None:
         print(f"Failed to converge even at {max_temp:.2f} K.")
         return None
@@ -129,12 +129,12 @@ class TBLiteCalculator(TBLite):
         }
         if annealing_config is not None:
             self.annealing_config.update(annealing_config)
-        
+
     def calculate(
         self,
         atoms: Optional[Atoms] = None,
-        properties: Optional[List[str]] = None,
-        system_changes: List[str] = ase.calculators.calculator.all_changes,
+        properties: Optional[list[str]] = None,
+        system_changes: list[str] = ase.calculators.calculator.all_changes,
     ) -> None:
         """
         Add support for heating-annealing procedure if the initial calculation fails to converge.
@@ -318,8 +318,7 @@ class TBLiteDriver(BaseDriver):
         dummy_mf = SimpleNamespace(mol=mol, e_tot=e_tot)
         return dummy_mf
 
-    def run_kernel(
-        self, atoms: Optional[Atoms] = None, use_cache: bool = True) -> Result:
+    def run_kernel(self, atoms: Optional[Atoms] = None, use_cache: bool = True) -> Result:
         self.update_atoms(atoms)
         if self.xtb is None:
             self.xtb = self.build_xtb()
@@ -345,13 +344,15 @@ class TBLiteDriver(BaseDriver):
             max_temp = annealing_config.get("max_temp", 5000.0)
             heating_step = annealing_config.get("heating_step", 300.0)
             annealing_step = annealing_config.get("annealing_step", 50.0)
-            res = heating_annealing(self.xtb, temp=etemp, max_temp=max_temp, heating_step=heating_step, annealing_step=annealing_step)
+            res = heating_annealing(
+                self.xtb, temp=etemp, max_temp=max_temp, heating_step=heating_step, annealing_step=annealing_step
+            )
             converged = res is not None
         if use_cache and converged:
             self._res_cache = res
         return res
-        
-    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> Tuple[float, str]:
+
+    def _compute_energy_impl(self, atoms: Optional[Atoms] = None) -> tuple[float, str]:
         self._extra_results.clear()  # clear previous extra results
         res = self.run_kernel(atoms)
         if res is None:
@@ -360,7 +361,7 @@ class TBLiteDriver(BaseDriver):
 
         return res["energy"], "Eh"
 
-    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> Tuple[np.ndarray, str]:
+    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> tuple[np.ndarray, str]:
         res = self.run_kernel(atoms)
         if res is None:
             self.log("Failed to converge")

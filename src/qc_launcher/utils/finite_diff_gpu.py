@@ -1,13 +1,13 @@
 # copy from pyscf.tools.finite_diff.py and add gpu4pyscf support
 import numpy as np
-from pyscf import gto
-from pyscf import lib
-from pyscf.lib import logger
 from gpu4pyscf.grad.rhf import GradientsBase
 from gpu4pyscf.hessian.rhf import HessianBase
+from pyscf import gto, lib
+from pyscf.lib import logger
+
 
 def kernel(method, displacement=1e-2):
-    '''
+    """
     Evaluate gradients or Hessians for a given method using finite difference approximation.
 
     Args:
@@ -21,30 +21,30 @@ def kernel(method, displacement=1e-2):
     Returns:
         An (n, 3) array for gradients or (n, n, 3, 3) array for hessian,
         depending on the given method.
-    '''
+    """
     assert isinstance(method, lib.StreamObject)
 
     mol = method.mol
     original_coords = mol.atom_coords()
     natm = mol.natm
     if isinstance(method, GradientsBase):
-        logger.info(mol, 'Computing finite-difference Hessian for {method}')
+        logger.info(mol, "Computing finite-difference Hessian for {method}")
         if method.base.conv_tol > displacement**3:
-            logger.warn(mol, 'conv_tol %g with displacement %g might be insufficinet',
-                        method.base.conv_tol, displacement)
-        de = np.empty((natm,3,natm,3))
+            logger.warn(
+                mol, "conv_tol %g with displacement %g might be insufficinet", method.base.conv_tol, displacement
+            )
+        de = np.empty((natm, 3, natm, 3))
     else:
-        logger.info(mol, 'Computing finite-difference Gradients for {method}')
+        logger.info(mol, "Computing finite-difference Gradients for {method}")
         if method.conv_tol > displacement**2:
-            logger.warn(mol, 'conv_tol %g with displacement %g might be insufficinet',
-                        method.conv_tol, displacement)
-        de = np.empty((natm,3))
+            logger.warn(mol, "conv_tol %g with displacement %g might be insufficinet", method.conv_tol, displacement)
+        de = np.empty((natm, 3))
 
     scan = None
     if isinstance(method, (lib.SinglePointScanner, lib.GradScanner)):
         scan = method
-    elif hasattr(method, 'as_scanner'):
-        logger.info(mol, 'Apply {method}.scanner')
+    elif hasattr(method, "as_scanner"):
+        logger.info(mol, "Apply {method}.scanner")
         scan = method.as_scanner()
     else:
         method = method.copy()
@@ -52,31 +52,32 @@ def kernel(method, displacement=1e-2):
             method.base = method.base.copy()
 
     if scan is not None:
+
         def evaluate(r):
-            mol.set_geom_(r, unit='Bohr')
+            mol.set_geom_(r, unit="Bohr")
             if scan:
                 if isinstance(method, GradientsBase):
                     res = scan(mol)[1]
                 else:
                     res = scan(mol)
                 if not scan.converged:
-                    raise RuntimeError('{scan} not converged')
+                    raise RuntimeError("{scan} not converged")
                 return res
     else:
-        logger.info(mol, '{method}.scanner not found. '
-                    'Initial guess may not be utilized among different geometries')
+        logger.info(mol, "{method}.scanner not found. Initial guess may not be utilized among different geometries")
+
         def evaluate(r):
             if isinstance(method, GradientsBase):
-                method.base.mol.set_geom_(r, unit='Bohr')
+                method.base.mol.set_geom_(r, unit="Bohr")
                 method.base.run()
                 if not method.base.converged:
-                    raise RuntimeError('{method.base} not converged')
-                method.mol.set_geom_(r, unit='Bohr')
+                    raise RuntimeError("{method.base} not converged")
+                method.mol.set_geom_(r, unit="Bohr")
                 return method.kernel()
             else:
-                method.mol.set_geom_(r, unit='Bohr')
+                method.mol.set_geom_(r, unit="Bohr")
                 if not method.converged:
-                    raise RuntimeError('{method} not converged')
+                    raise RuntimeError("{method} not converged")
                 res = method.kernel()
             return res
 
@@ -84,19 +85,20 @@ def kernel(method, displacement=1e-2):
         atom_coords = original_coords.copy()
         for i in range(natm):
             for x in range(3):
-                atom_coords[i,x] += displacement
+                atom_coords[i, x] += displacement
                 e1 = evaluate(atom_coords)
-                atom_coords[i,x] -= 2*displacement
+                atom_coords[i, x] -= 2 * displacement
                 e2 = evaluate(atom_coords)
-                de[i,x] = (e1 - e2) / (2*displacement)
-                atom_coords[i,x] = original_coords[i,x]
+                de[i, x] = (e1 - e2) / (2 * displacement)
+                atom_coords[i, x] = original_coords[i, x]
     finally:
-        mol.set_geom_(original_coords, unit='Bohr')
+        mol.set_geom_(original_coords, unit="Bohr")
 
     if isinstance(method, GradientsBase):
         # Hessian is stored as (N,N,3,3)
-        de = de.transpose(0,2,1,3)
+        de = de.transpose(0, 2, 1, 3)
     return de
+
 
 class Gradients(GradientsBase):
     displacement = 1e-2
@@ -118,10 +120,10 @@ class Gradients(GradientsBase):
         if isinstance(self, lib.GradScanner):
             return self
 
-        logger.info(self, 'Create Gradient scanner for %s', self.base.__class__)
-        name = 'FiniteDiffGrad' + GradScanner.__name_mixin__
-        return lib.set_class(GradScanner(self),
-                             (GradScanner, self.__class__), name)
+        logger.info(self, "Create Gradient scanner for %s", self.base.__class__)
+        name = "FiniteDiffGrad" + GradScanner.__name_mixin__
+        return lib.set_class(GradScanner(self), (GradScanner, self.__class__), name)
+
 
 class GradScanner(lib.GradScanner):
     def __call__(self, mol_or_geom, **kwargs):
@@ -135,6 +137,7 @@ class GradScanner(lib.GradScanner):
         e_tot = self.base.e_tot
         de = self.kernel()
         return e_tot, de
+
 
 class Hessian(HessianBase):
     displacement = 1e-2
