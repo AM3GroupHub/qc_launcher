@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 from ase import Atoms
@@ -76,19 +76,19 @@ class BaseDriver(ABC):
     log, and cache Hessians by geometry.
     """
 
-    def __init__(self, atoms: Optional[Atoms], config: dict, verbose: bool = True):
-        self.atoms: Optional[Atoms] = atoms
+    def __init__(self, atoms: Atoms | None, config: dict, verbose: bool = True):
+        self.atoms: Atoms | None = atoms
         self.config = config
         self.verbose = verbose
         self._hessian_cache: dict[bytes, np.ndarray] = {}
-        self._last_positions: Optional[np.ndarray] = None
+        self._last_positions: np.ndarray | None = None
 
     def log(self, message: str) -> None:
         if self.verbose:
             print(message)
 
     # ------------------------------------------------------------------ structure bookkeeping
-    def update_atoms(self, atoms: Optional[Atoms]) -> None:
+    def update_atoms(self, atoms: Atoms | None) -> None:
         """Adopt ``atoms`` as the current structure; ``None`` keeps the current one.
 
         Species, charge and multiplicity must not change (create a new driver for that). Whether the
@@ -137,26 +137,26 @@ class BaseDriver(ABC):
 
     # ------------------------------------------------------------------ backend implementations
     @abstractmethod
-    def _compute_energy_impl(self, atoms: Optional[Atoms]) -> tuple[float, str]:
+    def _compute_energy_impl(self, atoms: Atoms | None) -> tuple[float, str]:
         """Return (energy, unit) with unit 'eV' or 'Eh'."""
 
     @abstractmethod
-    def _compute_forces_impl(self, atoms: Optional[Atoms]) -> tuple[np.ndarray, str]:
+    def _compute_forces_impl(self, atoms: Atoms | None) -> tuple[np.ndarray, str]:
         """Return (forces of shape (N, 3), unit) with unit 'eV/Ang' or 'Eh/Bohr'."""
 
     @abstractmethod
-    def _compute_hessian_impl(self, atoms: Optional[Atoms]) -> np.ndarray:
+    def _compute_hessian_impl(self, atoms: Atoms | None) -> np.ndarray:
         """Return the Hessian in either layout accepted by :func:`convert_hessian`."""
 
     # ------------------------------------------------------------------ public API
-    def compute_energy(self, atoms: Optional[Atoms] = None) -> float:
+    def compute_energy(self, atoms: Atoms | None = None) -> float:
         """Potential energy in eV."""
         energy_ev = to_ev(*self._compute_energy_impl(atoms))
         self.log(f"Total Energy        [eV]: {energy_ev:16.10f}")
         self.log(f"Total Energy        [Eh]: {energy_ev / Hartree:16.10f}")
         return energy_ev
 
-    def compute_forces(self, atoms: Optional[Atoms] = None) -> np.ndarray:
+    def compute_forces(self, atoms: Atoms | None = None) -> np.ndarray:
         """Forces in eV/Ang, shape (N, 3)."""
         forces = to_ev_per_ang(*self._compute_forces_impl(atoms))
         self.log("Forces [eV/Angstrom]:")
@@ -166,7 +166,7 @@ class BaseDriver(ABC):
 
     def compute_hessian(
         self,
-        atoms: Optional[Atoms] = None,
+        atoms: Atoms | None = None,
         use_cache: bool = True,
         hess_format: HessianFormat = "ase",
     ) -> np.ndarray:
