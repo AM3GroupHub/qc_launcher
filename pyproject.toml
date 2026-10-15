@@ -1,6 +1,11 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "qc_launcher"
-version = "0.2.0"
+version = "0.3.0"
+description = "YAML-driven CLI for quantum chemistry, MLIP, GSM, NEB, MD and pysisyphus workflows on ASE drivers"
 authors = [
     { name = "Peichen Zhong" },
     { name = "Yicheng Chen" }
@@ -9,17 +14,23 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "ase",
+    "numpy",
     "pyyaml",
-    "pyscf<=2.10.0",
+    "pyscf>=2.10",
     "sella",
 ]
+
 [project.scripts]
 qc_launch = "qc_launcher.cli:main"
+
 [project.optional-dependencies]
 gpu4pyscf = [
     "cupy-cuda12x==13.4.1",
     "cutensor-cu12==2.2.0",
     "gpu4pyscf-cuda12x",
+]
+tblite = [
+    "tblite",
 ]
 gsm = [
     "pygsm @ git+https://github.com/X1X1010/pygsm.git",
@@ -28,11 +39,42 @@ pysisyphus = [
     "pysisyphus",
 ]
 mace = [
-    "mace-torch"
+    "mace-torch",
 ]
 fairchem = [
-    "fairchem-core"
+    "fairchem-core",
 ]
+dev = [
+    "pytest",
+    "ruff",
+]
+
 [tool.setuptools]
 packages = { find = { where = ["src"] } }
 package-dir = { "" = "src" }
+
+[tool.setuptools.package-data]
+qc_launcher = ["utils/pcm_eps.txt"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+ignore = ["B028"]  # explicit stacklevel on warnings.warn is not useful for CLI-facing warnings
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "pyscf: needs pyscf",
+    "gpu: needs cupy/gpu4pyscf and a GPU",
+    "tblite: needs tblite",
+    "mace: needs mace-torch and a MACE model file",
+    "uma: needs fairchem-core and a UMA model file",
+    "sella: needs sella",
+    "pygsm: needs pygsm",
+    "pysisyphus: needs pysisyphus",
+    "slow: takes more than ~30 s",
+]
