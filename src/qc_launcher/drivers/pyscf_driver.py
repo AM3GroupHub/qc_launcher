@@ -11,6 +11,7 @@ from pyscf import dft, gto, lib
 from pyscf.gto import Mole, charge
 from pyscf.lib import GradScanner
 
+from qc_launcher.utils.config import rename_deprecated_keys
 from qc_launcher.utils.utils import read_pcm_eps
 
 from .base_driver import BaseDriver
@@ -200,7 +201,7 @@ class PySCFDriver(BaseDriver):
 
         # solvation model
         if with_solvent:
-            solvent = solvent
+            solvent = rename_deprecated_keys(solvent, "driver.solvent")
             if solvent["method"].lower() in ["c-pcm", "ief-pcm", "ss(v)pe", "cosmo"]:
                 mf = mf.PCM()
                 mf.with_solvent.lebedev_order = 29
@@ -217,13 +218,13 @@ class PySCFDriver(BaseDriver):
                 mf = mf.SMD()
                 mf.with_solvent.lebedev_order = 29
                 mf.with_solvent.method = "SMD"
-                if "solvent_descriptor" in solvent:
-                    mf.with_solvent.solvent_descriptor = solvent["solvent_descriptor"]
+                if "solvent_descriptors" in solvent:
+                    mf.with_solvent.solvent_descriptors = solvent["solvent_descriptors"]
                 elif "solvent" in solvent:
                     mf.with_solvent.solvent = solvent["solvent"]
                 else:
                     raise ValueError(
-                        "For SMD solvent, either 'solvent_descriptor' or 'solvent' must be specified in config"
+                        "For SMD solvent, either 'solvent_descriptors' or 'solvent' must be specified in config"
                     )
             else:
                 raise ValueError(f"Unknown solvent method: {solvent['method']}")

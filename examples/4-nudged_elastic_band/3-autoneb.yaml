@@ -6,13 +6,12 @@ driver:
   device: cuda
   task_name: omol
 
-neb:
+autoneb:
   max_images: 11
   fmax: 0.05
   climb: true
   max_opt_steps: null
   max_neb_steps: 200
-  climb_after: 50
   spring_constant: 0.1
   neb_method: improvedtangent
   space_energy_ratio: 0.5

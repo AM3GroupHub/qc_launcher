@@ -7,7 +7,7 @@ driver:
   with_df: true
   auxbasis: def2-universal-jkfit
   with_gpu: true
-  thread: 4
+  threads: 4
   max_memory: 1  # GB
 
 opt:
@@ -16,7 +16,7 @@ opt:
   trajectory: water_opt.traj  # ${inputfile}_opt.traj
   outputfile: water_opt.xyz  # ${inputfile}_opt.xyz
   internal: true  # default
-  delta: 0.01  # default
+  delta0: 0.01  # default
   eta: 1e-4  # default
   gamma: 0.1  # default
   nsteps_per_diag: 3  # default

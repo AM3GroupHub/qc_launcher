@@ -16,28 +16,15 @@ except ModuleNotFoundError as exc:
         ) from exc
     raise
 
-from .driver_factory import get_driver
+from .driver_factory import driver_from_config
 
 
 class QCSisyphusCalc(Calculator):
     conf_key = "qc_launcher"
 
     def __init__(self, driver: dict, charge: int = None, mult: int = None, **kwargs) -> None:
-        # load driver
-        driver_config = dict(driver)
-        driver_name = driver_config.pop("name")
-        driver_obj = get_driver(
-            name=driver_name,
-            atoms=None,
-            config=driver_config,
-            verbose=False,
-        )
-        # read charge and multiplicity from driver.atoms.info, default to 0 and 1 if not present
-        driver_info = {} if driver_obj.atoms is None else driver_obj.atoms.info
-        charge = driver_info.get("charge", 0) if charge is None else charge
-        mult = driver_info.get("multiplicity", 1) if mult is None else mult
-        # initialize the parent Calculator class with charge and multiplicity
-        super().__init__(charge=charge, mult=mult, **kwargs)
+        driver_obj = driver_from_config(driver, atoms=None, verbose=False)
+        super().__init__(charge=0 if charge is None else charge, mult=1 if mult is None else mult, **kwargs)
         self.driver = driver_obj
 
     def prepare_atoms(self, atoms: list[str], coords: np.ndarray, **prepare_kwargs) -> Atoms:

@@ -15,7 +15,7 @@ md:
   min_trajectory: water_min.traj
   timestep: 0.5  # fs
   temperature: 300.0  # K
-  dtamp: 50.0  # fs
+  tdamp: 50.0  # fs
   tchain: 3
   tloop: 1
   nsteps: 1000

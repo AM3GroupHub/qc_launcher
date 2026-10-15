@@ -12,7 +12,7 @@ md:
   timestep: 0.5  # fs
   temperature: 300.0  # K
   pressure: 101325  # Pa
-  dtamp: 50.0  # fs
+  tdamp: 50.0  # fs
   pdamp: 500.0  # fs
   tchain: 3
   pchain: 3

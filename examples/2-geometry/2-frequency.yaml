@@ -7,7 +7,7 @@ driver:
   with_df: true
   auxbasis: def2-universal-jkfit
   with_gpu: true
-  thread: 4
+  threads: 4
   max_memory: 1  # GB
 
 freq:
