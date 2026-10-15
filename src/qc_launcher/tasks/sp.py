@@ -1,17 +1,13 @@
-import time
-
 from qc_launcher.drivers import BaseDriver
+
+from .common import timed
 
 
 def run_sp(driver: BaseDriver) -> None:
-    start_time = time.time()
-    driver.compute_energy()
-    end_time = time.time()
-    print(f"Single point energy calculation completed in {end_time - start_time:.2f} seconds.\n")
+    with timed("Single point energy calculation"):
+        driver.compute_energy()
 
 
 def run_grad(driver: BaseDriver) -> None:
-    start_time = time.time()
-    driver.compute_forces()
-    end_time = time.time()
-    print(f"Gradient calculation completed in {end_time - start_time:.2f} seconds.\n")
+    with timed("Gradient calculation"):
+        driver.compute_forces()

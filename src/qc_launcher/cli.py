@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
@@ -16,6 +15,7 @@ from ase import Atoms
 
 from qc_launcher.drivers import BaseDriver, driver_from_config
 from qc_launcher.tasks import load_task
+from qc_launcher.tasks.common import timed
 from qc_launcher.utils.config import rename_deprecated_keys
 from qc_launcher.utils.optional import is_missing_package, missing_optional_dependency
 
@@ -104,9 +104,8 @@ def launch_path(task_name: str, config_path: str, *, verbose: bool = True) -> No
     config, atoms_list, filename, driver = _prepare_run(config_path, multi=True, verbose=verbose)
     task_config = require_task_config(config, task_name)
     runner = load_task(task_name)
-    start_time = time.time()
-    runner(driver, task_config, atoms_list, filename)
-    print(f"{task_name.upper()} calculation completed in {time.time() - start_time:.2f} seconds.\n")
+    with timed(f"{task_name.upper()} calculation"):
+        runner(driver, task_config, atoms_list, filename)
 
 
 def launch_pysis(config_path: str) -> None:

@@ -1,84 +1,69 @@
-import time
+"""Intrinsic reaction coordinate with Sella's IRC, forward and/or reverse from a transition state."""
+
+from __future__ import annotations
 
 import ase.io
-from ase.units import Bohr, Hartree
 from sella import IRC
 
 from qc_launcher.drivers import BaseDriver
 
+from .common import FMAX_DEFAULT, sella_hessian_function, timed
 
-def run_irc(
-    driver: BaseDriver,
-    config: dict,
-    filename: str = "molecule",
-) -> None:
-    # record the start time
-    start_time = time.time()
+DIRECTIONS = ("forward", "reverse", "both")
 
-    atoms = driver.atoms
 
-    # get config
-    irc_trajectory = config.get("irc_trajectory", f"{filename}_irc.traj")
-    irc_output = config.get("irc_output", f"{filename}_irc.xyz")
-    ninner_iter = config.get("ninner_iter", 10)
-    dx = float(config.get("dx", 0.1))  # step size in Angstrom
-    eta = float(config.get("eta", 1e-4))
-    keep_going = config.get("keep_going", False)
-    diag_every_n = config.get("diag_every_n", None)
-    fmax_criterion = float(config.get("fmax", 4.5e-4 * Hartree / Bohr))
-    steps = config.get("steps", 10)
-    direction = config.get("direction", "both")  # "forward", "backward", or "both"
-    assert direction in ["forward", "reverse", "both"], "Invalid direction. Must be 'forward', 'backward', or 'both'."
+def run_irc(driver: BaseDriver, config: dict, filename: str = "molecule") -> None:
+    """Config keys (defaults): ``irc_trajectory``, ``irc_output``, ``ninner_iter`` (10), ``dx`` [Angstrom] (0.1),
+    ``eta`` (1e-4), ``keep_going`` (False), ``diag_every_n``, ``fmax`` [eV/Angstrom], ``steps`` (10),
+    ``direction`` (forward | reverse | both; ``backward`` is accepted for reverse).
+    """
+    with timed("IRC"):
+        atoms = driver.atoms
+        irc_trajectory = config.get("irc_trajectory", f"{filename}_irc.traj")
+        irc_output = config.get("irc_output", f"{filename}_irc.xyz")
+        ninner_iter = int(config.get("ninner_iter", 10))
+        dx = float(config.get("dx", 0.1))
+        eta = float(config.get("eta", 1e-4))
+        keep_going = bool(config.get("keep_going", False))
+        diag_every_n = config.get("diag_every_n")
+        fmax_criterion = float(config.get("fmax", FMAX_DEFAULT))
+        steps = int(config.get("steps", 10))
+        direction = str(config.get("direction", "both")).lower()
+        if direction == "backward":
+            direction = "reverse"
+        if direction not in DIRECTIONS:
+            raise ValueError(f"Invalid direction '{direction}'. Use one of {DIRECTIONS}.")
 
-    # set sella IRC
-    atoms.calc = driver.to_ase_calc()
+        atoms.calc = driver.to_ase_calc()
+        irc = IRC(
+            atoms=atoms,
+            trajectory=irc_trajectory,
+            ninner_iter=ninner_iter,
+            dx=dx,
+            eta=eta,
+            peskwargs={"threepoint": True},
+            keep_going=keep_going,
+            diag_every_n=diag_every_n,
+            hessian_function=sella_hessian_function(driver),
+        )
 
-    def hessian_func(x):
-        return driver.compute_hessian(x, use_cache=True, hess_format="ase")
+        pos_init = atoms.get_positions().copy()
+        frames = []
+        n_forward = 0
+        if direction in ("forward", "both"):
+            print("Starting forward IRC...")
+            if not irc.run(fmax=fmax_criterion, steps=steps, direction="forward"):
+                print("Warning: forward IRC did not converge within the maximum number of steps.")
+            frames = list(ase.io.Trajectory(irc_trajectory, "r"))
+            n_forward = len(frames)
+        if direction in ("reverse", "both"):
+            print("Starting reverse IRC...")
+            irc.v0ts = None  # let Sella re-derive the transition vector for the other direction
+            atoms.set_positions(pos_init)
+            if not irc.run(fmax=fmax_criterion, steps=steps, direction="reverse"):
+                print("Warning: reverse IRC did not converge within the maximum number of steps.")
+            # new frames only; the first one repeats the transition state
+            reverse_frames = list(ase.io.Trajectory(irc_trajectory, "r"))[n_forward + 1 :]
+            frames = reverse_frames[::-1] + frames  # reactant -> TS -> product
 
-    irc = IRC(
-        atoms=atoms,
-        trajectory=irc_trajectory,
-        ninner_iter=ninner_iter,
-        dx=dx,
-        eta=eta,
-        peskwargs={"threepoint": True},
-        keep_going=keep_going,
-        diag_every_n=diag_every_n,
-        hessian_function=hessian_func,
-    )
-
-    # forward direction
-    pos_init = atoms.get_positions().copy()
-    irc_atoms_traj = []
-    traj_offset = 0
-    if direction in {"forward", "both"}:
-        print("Starting forward IRC...")
-        converged = irc.run(fmax=fmax_criterion, steps=steps, direction="forward")
-        if not converged:
-            Warning("Forward IRC did not converge within the maximum number of steps.")
-        forward_traj = ase.io.Trajectory(irc_trajectory, "r")
-        irc_atoms_traj.extend([frame for frame in forward_traj])  # skip the first frame which is the initial geometry
-        traj_offset = len(irc_atoms_traj)
-
-    # reverse direction
-    if direction in {"reverse", "both"}:
-        print("Starting reverse IRC...")
-        # reset positions to initial geometry
-        irc.v0ts = None
-        atoms.set_positions(pos_init)
-        converged = irc.run(fmax=fmax_criterion, steps=steps, direction="reverse")
-        if not converged:
-            Warning("Reverse IRC did not converge within the maximum number of steps.")
-        backward_traj = ase.io.Trajectory(irc_trajectory, "r")[
-            traj_offset + 1 :
-        ]  # read the new frames added by reverse IRC
-        irc_atoms_traj = [
-            frame for frame in backward_traj[::-1]
-        ] + irc_atoms_traj  # reverse direction frames should be added before the forward direction frames
-
-    # save the full IRC trajectory
-    ase.io.write(irc_output, irc_atoms_traj)
-
-    end_time = time.time()
-    print(f"IRC completed in {end_time - start_time:.2f} seconds.")
+        ase.io.write(irc_output, frames)

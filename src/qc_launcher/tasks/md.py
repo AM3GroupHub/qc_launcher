@@ -1,5 +1,8 @@
+"""Molecular dynamics with ASE integrators (NVE, Langevin, Nose-Hoover chain NVT, MTK / Melchionna NPT)."""
+
+from __future__ import annotations
+
 import os
-import time
 
 import ase.io
 import numpy as np
@@ -15,214 +18,131 @@ from ase.units import GPa, Pascal, fs
 
 from qc_launcher.drivers import BaseDriver
 
+from .common import timed
 
-def run_md(
-    driver: BaseDriver,
-    config: dict,
-    filename: str = "molecule",
-) -> None:
+OPTIMIZERS = {"FIRE": FIRE, "FIRE2": FIRE2, "LBFGS": LBFGS}
+MTK_NPT_CLASSES = {"NPT": MTKNPT, "MTKNPT": MTKNPT, "IsotropicMTKNPT": IsotropicMTKNPT}
+
+
+def run_md(driver: BaseDriver, config: dict, filename: str = "molecule") -> None:
+    """Config keys (defaults): ``ensemble`` (NVT; NVE | VelocityVerlet | Langevin | NVT | NoseHooverChainNVT |
+    NPT | MTKNPT | IsotropicMTKNPT | MelchionnaNPT), ``minimize`` (True) with ``optimizer`` (FIRE | FIRE2 |
+    LBFGS), ``opt_kwargs``, ``fmax`` (0.05), ``max_min_steps`` (500), ``min_trajectory``; ``timestep`` [fs] (1.0),
+    ``temperature`` [K] (300), ``nsteps`` (1000), ``loginterval`` (100), ``trajectory``, ``logfile`` ('-'),
+    ``append_trajectory`` (False), ``init_velocities`` (True), ``log_stress`` (False), ``seed`` (42),
+    ``resume`` (False). Langevin: ``friction`` [1/fs] (0.002). NVT/NPT: ``tdamp`` [fs] (100 * timestep),
+    ``tchain`` (3), ``tloop`` (1); MTK NPT: ``pressure`` [Pa] (101325), ``pdamp`` [fs] (1000 * timestep),
+    ``pchain`` (3), ``ploop`` (1); Melchionna NPT: ``externalstress`` [Pa], ``mask``, ``ttime`` / ``ptime`` [fs],
+    ``bulk_modulus`` [GPa] (100). Atoms with a non-zero tag are kept fixed.
     """
-    Run molecular dynamics simulation using various ensembles (NVE, NVT, NPT).
+    with timed("MD simulation"):
+        atoms = driver.atoms
+        ensemble = config.get("ensemble", "NVT")
+        minimize = bool(config.get("minimize", True))
+        optimizer = config.get("optimizer", "FIRE")
+        opt_kwargs = config.get("opt_kwargs") or {}
+        fmax = float(config.get("fmax", 0.05))
+        max_min_steps = int(config.get("max_min_steps", 500))
+        min_trajectory = config.get("min_trajectory", f"{filename}_min.traj")
+        timestep = float(config.get("timestep", 1.0))
+        temperature = float(config.get("temperature", 300.0))
+        nsteps = int(config.get("nsteps", 1000))
+        loginterval = int(config.get("loginterval", 100))
+        trajectory = config.get("trajectory", f"{filename}_md.traj")
+        logfile = config.get("logfile", "-")
+        append_trajectory = bool(config.get("append_trajectory", False))
+        init_velocities = bool(config.get("init_velocities", True))
+        log_stress = bool(config.get("log_stress", False))
+        rng = np.random.default_rng(seed=config.get("seed", 42))
 
-    Supports different integrators:
-    - VelocityVerlet: NVE ensemble (constant energy)
-    - Langevin: NVT ensemble (constant temperature with friction)
-    - NPT: NPT ensemble (constant temperature and pressure)
-    """
-    # record the start time
-    start_time = time.time()
+        existing_steps = 0
+        if config.get("resume", False) and os.path.exists(trajectory):
+            print(f"Resuming from existing trajectory: {trajectory}")
+            frames = ase.io.Trajectory(trajectory)
+            atoms = frames[-1]  # the driver keeps its own structure; MD continues on the last frame
+            existing_steps = (len(frames) - 1) * loginterval  # the first frame is step 0
+            if existing_steps >= nsteps:
+                print(f"Existing trajectory already has {existing_steps} steps (>= {nsteps} requested). Nothing to do.")
+                return
+            nsteps -= existing_steps
+            append_trajectory = True
+            init_velocities = False
+            minimize = False
+            print(f"Resuming MD simulation for the remaining {nsteps} steps...")
 
-    # get atoms object from driver
-    atoms = driver.atoms
+        fix_indices = np.flatnonzero(atoms.get_tags())
+        if fix_indices.size:
+            atoms.set_constraint(FixAtoms(indices=fix_indices))
 
-    # get MD configuration
-    ensemble = config.get("ensemble", "NVT")
-    minimize = config.get("minimize", True)
-    optimizer = config.get("optimizer", "FIRE")
-    opt_kwargs = config.get("opt_kwargs") or {}
-    fmax = float(config.get("fmax", 0.05))  # eV/Å
-    max_min_steps = int(config.get("max_min_steps", 500))
-    min_trajectory = config.get("min_trajectory", f"{filename}_min.traj")
-    timestep = float(config.get("timestep", 1.0))  # fs
-    temperature = float(config.get("temperature", 300.0))  # Kelvin
-    nsteps = int(config.get("nsteps", 1000))
-    loginterval = int(config.get("loginterval", 100))
-    trajectory = config.get("trajectory", f"{filename}_md.traj")
-    logfile = config.get("logfile", "-")  # "-" means print to stdout
-    append_trajectory = config.get("append_trajectory", False)
-    init_velocities = config.get("init_velocities", True)
-    log_stress = bool(config.get("log_stress", False))
-    seed = config.get("seed", 42)
-    resume = config.get("resume", False)
-    rng = np.random.default_rng(seed=seed)  # For reproducibility
+        atoms.calc = driver.to_ase_calc()
 
-    # try to resume from existing trajectory if requested
-    if resume and os.path.exists(trajectory):
-        print(f"Resuming from existing trajectory: {trajectory}")
-        atoms_traj = ase.io.Trajectory(trajectory)
-        atoms = atoms_traj[-1]  # load the last frame
-        # modify some parameters for resuming
-        existing_steps = len(atoms_traj) * loginterval
-        if existing_steps >= nsteps:
-            print(
-                f"Existing trajectory already has {existing_steps} steps, which is >= requested {nsteps} steps. No need to run MD."
+        if minimize:
+            if optimizer not in OPTIMIZERS:
+                raise ValueError(f"Unknown optimizer '{optimizer}'. Use one of {list(OPTIMIZERS)}.")
+            print(f"Pre-minimizing using {optimizer} ...")
+            opt = OPTIMIZERS[optimizer](atoms, logfile=logfile, trajectory=min_trajectory, **opt_kwargs)
+            opt.run(fmax=fmax, steps=max_min_steps)
+
+        if init_velocities:
+            MaxwellBoltzmannDistribution(atoms, temperature_K=temperature, rng=rng)
+            Stationary(atoms)
+            ZeroRotation(atoms)
+
+        common = {
+            "timestep": timestep * fs,
+            "trajectory": trajectory,
+            "loginterval": loginterval,
+            "append_trajectory": append_trajectory,
+        }
+        if ensemble in ("NVE", "VelocityVerlet"):
+            dyn = VelocityVerlet(atoms, **common)
+        elif ensemble == "Langevin":
+            friction = float(config.get("friction", 0.002))  # 1/fs
+            dyn = Langevin(atoms, temperature_K=temperature, friction=friction / fs, **common)
+        elif ensemble in ("NVT", "NoseHooverChainNVT"):
+            dyn = NoseHooverChainNVT(
+                atoms,
+                temperature_K=temperature,
+                tdamp=float(config.get("tdamp", timestep * 100)) * fs,
+                tchain=int(config.get("tchain", 3)),
+                tloop=int(config.get("tloop", 1)),
+                **common,
             )
-            return
-        nsteps -= existing_steps  # only run the remaining steps
-        append_trajectory = True  # append to existing trajectory
-        print(f"Resuming MD simulation for remaining {nsteps} steps...")
-        init_velocities = False  # do not re-initialize velocities when resuming
-        minimize = False  # do not re-minimize when resuming
-
-    # read atoms tags to get constraints
-    fix_mask = np.asarray(atoms.get_tags(), dtype=bool)
-    fix_indices = np.where(fix_mask)[0]
-    if np.any(fix_indices):
-        constraints = FixAtoms(indices=fix_indices)
-        atoms.set_constraint(constraints)
-
-    # set calculator
-    atoms.calc = driver.to_ase_calc()
-
-    # pre-minimize the structure before starting MD
-    if minimize:
-        if optimizer == "FIRE":
-            opt = FIRE(atoms, logfile=logfile, trajectory=min_trajectory, **opt_kwargs)
-        elif optimizer == "FIRE2":
-            opt = FIRE2(atoms, logfile=logfile, trajectory=min_trajectory, **opt_kwargs)
-        elif optimizer == "LBFGS":
-            opt = LBFGS(atoms, logfile=logfile, trajectory=min_trajectory, **opt_kwargs)
+        elif ensemble in MTK_NPT_CLASSES:
+            dyn = MTK_NPT_CLASSES[ensemble](
+                atoms,
+                temperature_K=temperature,
+                pressure_au=float(config.get("pressure", 101325)) * Pascal,
+                tdamp=float(config.get("tdamp", timestep * 100)) * fs,
+                pdamp=float(config.get("pdamp", timestep * 1000)) * fs,
+                tchain=int(config.get("tchain", 3)),
+                pchain=int(config.get("pchain", 3)),
+                tloop=int(config.get("tloop", 1)),
+                ploop=int(config.get("ploop", 1)),
+                **common,
+            )
+        elif ensemble == "MelchionnaNPT":
+            externalstress = config.get("externalstress", 101325)  # Pa
+            if isinstance(externalstress, list):
+                externalstress = np.asarray(externalstress, dtype=float)
+            ptime = float(config.get("ptime", timestep * 1000))  # fs
+            bulk_modulus = float(config.get("bulk_modulus", 100))  # GPa
+            dyn = MelchionnaNPT(
+                atoms,
+                temperature_K=temperature,
+                externalstress=externalstress * Pascal,
+                mask=np.asarray(config.get("mask", [1, 1, 1]), dtype=bool),
+                ttime=float(config.get("ttime", timestep * 100)) * fs,
+                pfactor=(ptime * fs) ** 2 * bulk_modulus * GPa,
+                **common,
+            )
         else:
-            raise ValueError(f"Unknown optimization engine: {optimizer}.")
-        print(f"Pre-minimizing using {optimizer} ...")
-        opt.run(fmax=fmax, steps=max_min_steps)
+            raise ValueError(f"Unknown ensemble '{ensemble}'.")
 
-    # initialize velocities
-    if init_velocities:
-        MaxwellBoltzmannDistribution(atoms, temperature_K=temperature, rng=rng)
-        Stationary(atoms)
-        ZeroRotation(atoms)
-
-    # setup MD integrator based on ensemble
-    if ensemble in {"NVE", "VelocityVerlet"}:
-        dyn = VelocityVerlet(
-            atoms,
-            timestep=timestep * fs,
-            trajectory=trajectory,
-            loginterval=loginterval,
-            append_trajectory=append_trajectory,
-        )
-    elif ensemble == "Langevin":
-        friction = float(config.get("friction", 0.002))  # fs^-1
-        dyn = Langevin(
-            atoms,
-            timestep=timestep * fs,
-            temperature_K=temperature,
-            friction=friction / fs,
-            trajectory=trajectory,
-            loginterval=loginterval,
-            append_trajectory=append_trajectory,
-        )
-    elif ensemble in {"NVT", "NoseHooverChainNVT"}:
-        tdamp = float(config.get("dtamp", timestep * 100))  # fs
-        tchain = int(config.get("tchain", 3))
-        tloop = int(config.get("tloop", 1))
-        dyn = NoseHooverChainNVT(
-            atoms,
-            timestep=timestep * fs,
-            temperature_K=temperature,
-            tdamp=tdamp * fs,
-            tchain=tchain,
-            tloop=tloop,
-            trajectory=trajectory,
-            loginterval=loginterval,
-            append_trajectory=append_trajectory,
-        )
-    elif ensemble in {"NPT", "MTKNPT"}:
-        pressure = float(config.get("pressure", 101325))  # Pa
-        tdamp = float(config.get("dtamp", timestep * 100))  # fs
-        pdamp = float(config.get("pdamp", timestep * 1000))  # fs
-        tchain = int(config.get("tchain", 3))
-        tloop = int(config.get("tloop", 1))
-        pchain = int(config.get("pchain", 3))
-        ploop = int(config.get("ploop", 1))
-        dyn = MTKNPT(
-            atoms,
-            timestep=timestep * fs,
-            temperature_K=temperature,
-            pressure_au=pressure * Pascal,
-            tdamp=tdamp * fs,
-            pdamp=pdamp * fs,
-            tchain=tchain,
-            pchain=pchain,
-            tloop=tloop,
-            ploop=ploop,
-            trajectory=trajectory,
-            loginterval=loginterval,
-            append_trajectory=append_trajectory,
-        )
-    elif ensemble == "IsotropicMTKNPT":
-        pressure = float(config.get("pressure", 101325))  # Pa
-        tdamp = float(config.get("dtamp", timestep * 100))  # fs
-        pdamp = float(config.get("pdamp", timestep * 1000))  # fs
-        tchain = int(config.get("tchain", 3))
-        tloop = int(config.get("tloop", 1))
-        pchain = int(config.get("pchain", 3))
-        ploop = int(config.get("ploop", 1))
-        dyn = IsotropicMTKNPT(
-            atoms,
-            timestep=timestep * fs,
-            temperature_K=temperature,
-            pressure_au=pressure * Pascal,
-            tdamp=tdamp * fs,
-            pdamp=pdamp * fs,
-            tchain=tchain,
-            pchain=pchain,
-            tloop=tloop,
-            ploop=ploop,
-            trajectory=trajectory,
-            loginterval=loginterval,
-            append_trajectory=append_trajectory,
-        )
-    elif ensemble == "MelchionnaNPT":
-        externalstress = config.get("externalstress", 101325)  # Pa
-        if isinstance(externalstress, list):
-            externalstress = np.asarray(externalstress, dtype=float)
-        mask = config.get("mask", [1, 1, 1])  # default: isotropic pressure
-        mask = np.asarray(mask, dtype=bool)
-        ttime = float(config.get("ttime", timestep * 100))  # fs
-        ptime = float(config.get("ptime", timestep * 1000))  # fs
-        bulk_modulus = float(config.get("bulk_modulus", 100))  # GPa
-        pfactor = (ptime * fs) ** 2 * bulk_modulus * GPa
-        dyn = MelchionnaNPT(
-            atoms,
-            timestep=timestep * fs,
-            temperature_K=temperature,
-            externalstress=externalstress * Pascal,
-            mask=mask,
-            ttime=ttime * fs,
-            pfactor=pfactor,
-            trajectory=trajectory,
-            loginterval=loginterval,
-            append_trajectory=append_trajectory,
-        )
-    else:
-        raise ValueError(f"Unknown ensemble: {ensemble}.")
-
-    # run MD simulation
-    print(f"Starting MD simulation for {nsteps} steps...")
-    print(f"Timestep: {timestep} fs")
-    print(f"Total simulation time: {nsteps * timestep / 1000:.2f} ps")
-
-    md_logger = MDLogger(
-        dyn=dyn,
-        atoms=atoms,
-        logfile=logfile,
-        stress=log_stress,
-    )
-    dyn.attach(md_logger, interval=loginterval)
-    dyn.run(nsteps)
-
-    # record end time
-    end_time = time.time()
-    print(f"MD simulation completed in {end_time - start_time:.2f} seconds.")
+        print(f"Starting MD simulation for {nsteps} steps...")
+        print(f"Timestep: {timestep} fs")
+        print(f"Total simulation time: {nsteps * timestep / 1000:.2f} ps")
+        dyn.attach(MDLogger(dyn=dyn, atoms=atoms, logfile=logfile, stress=log_stress), interval=loginterval)
+        # continue the step counter on resume: ASE then skips re-writing the last frame and keeps the time axis
+        dyn.nsteps = existing_steps
+        dyn.run(nsteps)
