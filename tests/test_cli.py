@@ -81,3 +81,10 @@ def test_multi_structure_loading(in_tmp, water):
     assert all(frame.info["charge"] == -1 for frame in structures)
     single, _ = cli.load_structures({"inputfile": "path.xyz"})
     assert len(single) == 3  # last frame of the file
+
+
+def test_extxyz_charge_and_multiplicity_become_plain_ints(in_tmp):
+    (in_tmp / "fe.xyz").write_text("1\ncharge=2 multiplicity=5\nFe 0 0 0\n")
+    atoms, _ = cli.load_structures({"inputfile": "fe.xyz"})
+    assert type(atoms.info["charge"]) is int and atoms.info["charge"] == 2
+    assert type(atoms.info["multiplicity"]) is int and atoms.info["multiplicity"] == 5

@@ -37,7 +37,9 @@ def load_structures(config: dict[str, Any], *, multi: bool = False) -> tuple[Str
     for frame in structures if multi else [structures]:
         for key in ("charge", "multiplicity"):
             if config.get(key) is not None:
-                frame.info[key] = config[key]
+                frame.info[key] = int(config[key])
+            elif key in frame.info:
+                frame.info[key] = int(frame.info[key])  # extxyz comment lines give numpy integers
     return structures, Path(inputfile).stem
 
 

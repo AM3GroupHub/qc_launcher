@@ -118,8 +118,8 @@ class PySCFDriver(BaseDriver):
             atom=[(symbol, pos) for symbol, pos in zip(self.atoms.get_chemical_symbols(), self.atoms.get_positions())],
             basis=config.get("basis", "def2-SVP"),
             ecp=config.get("ecp"),
-            charge=self.atoms.info.get("charge", 0),
-            spin=self.atoms.info.get("multiplicity", 1) - 1,
+            charge=int(self.atoms.info.get("charge", 0)),  # plain ints: ASE may hand us numpy integers
+            spin=int(self.atoms.info.get("multiplicity", 1)) - 1,
             max_memory=None if max_memory is None else float(max_memory) * 1024,  # GB -> MB
             verbose=int(config.get("verbose", 2)),
         )

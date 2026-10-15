@@ -62,8 +62,8 @@ def dummy_pyscf_mf(atoms: Atoms, e_tot_eh: float) -> SimpleNamespace:
 
     mol = gto.M(
         atom=[(symbol, position) for symbol, position in zip(atoms.get_chemical_symbols(), atoms.get_positions())],
-        charge=atoms.info.get("charge", 0),
-        spin=atoms.info.get("multiplicity", 1) - 1,
+        charge=int(atoms.info.get("charge", 0)),
+        spin=int(atoms.info.get("multiplicity", 1)) - 1,
     )
     return SimpleNamespace(mol=mol, e_tot=e_tot_eh)
 
