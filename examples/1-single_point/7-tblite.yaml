@@ -5,8 +5,8 @@ driver:
   method: GFN2-xTB  # GFN1-xTB
   accuracy: 1.0
   guess: sad
-  etemp: 298.15
-  max_iter: 250
+  electronic_temperature: 298.15
+  scf_max_iter: 250
   mixer_damping: 0.4
   verbosity: 0
 

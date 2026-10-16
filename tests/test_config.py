@@ -49,3 +49,39 @@ def test_gsm_keys_follow_pygsm_names():
     }
     with pytest.warns(ConfigDeprecationWarning):
         assert rename_deprecated_keys({"max_nodes": 7}, "gsm") == {"nnodes": 7}
+
+
+@pytest.mark.parametrize(
+    "section, old, new",
+    [
+        (
+            "driver",
+            {"verbose": 1, "scf_max_cycle": 20, "disp": "d3bj", "numerical_hess": True, "finite_diff_eps": 1e-3},
+            {
+                "verbosity": 1,
+                "scf_max_iter": 20,
+                "dispersion": "d3bj",
+                "numerical_hessian": True,
+                "finite_diff_step": 1e-3,
+            },
+        ),
+        (
+            "driver",
+            {"max_iter": 30, "etemp": 500.0, "solvent": {"method": "smd"}},
+            {"scf_max_iter": 30, "electronic_temperature": 500.0, "solvation": {"method": "smd"}},
+        ),
+        ("driver.solvation", {"method": "cpcm", "eps": 4.0}, {"model": "cpcm", "epsilon": 4.0}),
+        ("freq", {"Bav": "auto"}, {"bav": "auto"}),
+        (
+            "irc",
+            {"irc_trajectory": "a.traj", "irc_output": "a.xyz", "steps": 5},
+            {"trajectory": "a.traj", "outputfile": "a.xyz", "max_steps": 5},
+        ),
+        ("neb", {"max_neb_steps": 10, "max_opt_steps": 2}, {"max_steps": 10, "endpoint_max_steps": 2}),
+        ("autoneb", {"max_neb_steps": 10, "max_opt_steps": 2}, {"max_steps": 10, "endpoint_max_steps": 2}),
+        ("gsm", {"endpoint_opt_steps": 20}, {"endpoint_max_steps": 20}),
+    ],
+)
+def test_unified_key_aliases(section, old, new):
+    with pytest.warns(ConfigDeprecationWarning):
+        assert rename_deprecated_keys(old, section) == new

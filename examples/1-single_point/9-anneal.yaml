@@ -3,7 +3,7 @@ inputfile: fe_aquo.xyz
 driver:
   name: tblite
   method: GFN2-xTB
-  max_iter: 10
+  scf_max_iter: 10
   retry_annealing: true
 
 

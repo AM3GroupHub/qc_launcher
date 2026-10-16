@@ -20,7 +20,7 @@ def test_neb_runs_and_writes_results(in_tmp, hcn_hnc):
     from qc_launcher.drivers.tblite_driver import TBLiteDriver
 
     driver = TBLiteDriver(hcn_hnc[0], {"verbosity": 0}, verbose=False)
-    config = {"num_images": 3, "fmax": 0.5, "max_neb_steps": 10, "max_opt_steps": 3, "climb": True, "climb_after": 5}
+    config = {"num_images": 3, "fmax": 0.5, "max_steps": 10, "endpoint_max_steps": 3, "climb": True, "climb_after": 5}
     load_task("neb")(driver, config, hcn_hnc, "hcn")
     images = ase.io.read(in_tmp / "hcn_neb.xyz", index=":")
     assert len(images) == 5

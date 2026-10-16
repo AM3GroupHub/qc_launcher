@@ -6,10 +6,9 @@ driver:
   basis: 6-31G(d)
   with_df: false
   with_gpu: false
-  with_solvent: true
-  verbose: 2
-  solvent:
-    method: SMD
+  verbosity: 2
+  solvation:
+    model: SMD
     solvent: water
     # [n, n25, alpha, beta, gamma, epsilon, phi, psi]
     # solvent_descriptors: [1.3328, 1.3323, 0.82, 0.35, -1.0, 78.355, -1.0, -1.0]

@@ -15,7 +15,7 @@ from .common import check_same_species, relax_endpoints, write_path_results
 
 def run_neb(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filename: str = "molecule") -> None:
     """Config keys (defaults): ``num_images`` (len(input) - 2), ``fmax`` [eV/Angstrom] (0.05), ``climb`` (False),
-    ``climb_after`` (0; NEB steps before switching to CI-NEB), ``max_neb_steps`` (200), ``max_opt_steps`` (step
+    ``climb_after`` (0; NEB steps before switching to CI-NEB), ``max_steps`` (200), ``endpoint_max_steps`` (step
     limit for the endpoint relaxations; None = until converged), ``spring_constant`` (0.1), ``neb_method``
     (improvedtangent), ``fixed_reactant`` / ``fixed_product`` (False), ``interpolate_method`` (idpp),
     ``trajectory``. Two input frames are interpolated; more must be exactly ``num_images + 2`` frames.
@@ -24,8 +24,8 @@ def run_neb(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filen
     num_images = int(config.get("num_images", len(atoms_list) - 2))
     fmax = float(config.get("fmax", 0.05))
     climb = bool(config.get("climb", False))
-    max_opt_steps = config.get("max_opt_steps")
-    max_neb_steps = int(config.get("max_neb_steps", 200))
+    max_opt_steps = config.get("endpoint_max_steps")
+    max_neb_steps = int(config.get("max_steps", 200))
     climb_after = int(config.get("climb_after", 0))
     spring_constant = float(config.get("spring_constant", 0.1))
     neb_method = config.get("neb_method", "improvedtangent")

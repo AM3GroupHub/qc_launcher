@@ -4,9 +4,9 @@ driver:
   name: tblite
   method: GFN2-xTB
   solvation:
-    # method: alpb  # gbsa
+    # model: alpb  # gbsa
     # solvent: water
-    method: cpcm  # gbe; gb
+    model: cpcm  # gbe; gb
     epsilon: 78.4
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 
 import ase.io
 import numpy as np
@@ -17,6 +18,7 @@ from ase.optimize import FIRE, FIRE2, LBFGS
 from ase.units import GPa, Pascal, fs
 
 from qc_launcher.drivers import BaseDriver
+from qc_launcher.utils.config import ConfigDeprecationWarning
 
 from .common import timed
 
@@ -24,26 +26,55 @@ OPTIMIZERS = {"FIRE": FIRE, "FIRE2": FIRE2, "LBFGS": LBFGS}
 MTK_NPT_CLASSES = {"NPT": MTKNPT, "MTKNPT": MTKNPT, "IsotropicMTKNPT": IsotropicMTKNPT}
 
 
+LEGACY_MINIMIZE_KEYS = {  # flat md keys -> keys of the minimize block
+    "optimizer": "optimizer",
+    "fmax": "fmax",
+    "max_min_steps": "max_steps",
+    "min_trajectory": "trajectory",
+    "opt_kwargs": "kwargs",
+}
+
+
+def resolve_minimize_block(config: dict) -> tuple[bool, dict]:
+    """``minimize`` may be a bool or a block; flat legacy keys are folded into the block with a warning."""
+    setting = config.get("minimize", True)
+    if isinstance(setting, dict):
+        minimize, block = True, dict(setting)
+    else:
+        minimize, block = bool(setting), {}
+    legacy = {old: config[old] for old in LEGACY_MINIMIZE_KEYS if old in config}
+    if legacy:
+        warnings.warn(
+            f"[md] keys {sorted(legacy)} are deprecated; put them in a 'minimize' block "
+            "(optimizer, fmax, max_steps, trajectory, kwargs).",
+            ConfigDeprecationWarning,
+        )
+        for old, value in legacy.items():
+            block.setdefault(LEGACY_MINIMIZE_KEYS[old], value)
+    return minimize, block
+
+
 def run_md(driver: BaseDriver, config: dict, filename: str = "molecule") -> None:
     """Config keys (defaults): ``ensemble`` (NVT; NVE | VelocityVerlet | Langevin | NVT | NoseHooverChainNVT |
-    NPT | MTKNPT | IsotropicMTKNPT | MelchionnaNPT), ``minimize`` (True) with ``optimizer`` (FIRE | FIRE2 |
-    LBFGS), ``opt_kwargs``, ``fmax`` (0.05), ``max_min_steps`` (500), ``min_trajectory``; ``timestep`` [fs] (1.0),
-    ``temperature`` [K] (300), ``nsteps`` (1000), ``loginterval`` (100), ``trajectory``, ``logfile`` ('-'),
-    ``append_trajectory`` (False), ``init_velocities`` (True), ``log_stress`` (False), ``seed`` (42),
-    ``resume`` (False). Langevin: ``friction`` [1/fs] (0.002). NVT/NPT: ``tdamp`` [fs] (100 * timestep),
-    ``tchain`` (3), ``tloop`` (1); MTK NPT: ``pressure`` [Pa] (101325), ``pdamp`` [fs] (1000 * timestep),
-    ``pchain`` (3), ``ploop`` (1); Melchionna NPT: ``externalstress`` [Pa], ``mask``, ``ttime`` / ``ptime`` [fs],
-    ``bulk_modulus`` [GPa] (100). Atoms with a non-zero tag are kept fixed.
+    NPT | MTKNPT | IsotropicMTKNPT | MelchionnaNPT); ``minimize`` (true, false, or a block {optimizer: FIRE |
+    FIRE2 | LBFGS, fmax (0.05), max_steps (500), trajectory, kwargs}) for the pre-minimization;
+    ``timestep`` [fs] (1.0), ``temperature`` [K] (300), ``nsteps`` (1000), ``loginterval`` (100),
+    ``trajectory``, ``logfile`` ('-'), ``append_trajectory`` (False), ``init_velocities`` (True),
+    ``log_stress`` (False), ``seed`` (42), ``resume`` (False). Langevin: ``friction`` [1/fs] (0.002).
+    NVT/NPT: ``tdamp`` [fs] (100 * timestep), ``tchain`` (3), ``tloop`` (1); MTK NPT: ``pressure`` [Pa]
+    (101325), ``pdamp`` [fs] (1000 * timestep), ``pchain`` (3), ``ploop`` (1); Melchionna NPT:
+    ``externalstress`` [Pa], ``mask``, ``ttime`` / ``ptime`` [fs], ``bulk_modulus`` [GPa] (100).
+    Atoms with a non-zero tag are kept fixed.
     """
     with timed("MD simulation"):
         atoms = driver.atoms
         ensemble = config.get("ensemble", "NVT")
-        minimize = bool(config.get("minimize", True))
-        optimizer = config.get("optimizer", "FIRE")
-        opt_kwargs = config.get("opt_kwargs") or {}
-        fmax = float(config.get("fmax", 0.05))
-        max_min_steps = int(config.get("max_min_steps", 500))
-        min_trajectory = config.get("min_trajectory", f"{filename}_min.traj")
+        minimize, minimize_cfg = resolve_minimize_block(config)
+        optimizer = minimize_cfg.get("optimizer", "FIRE")
+        opt_kwargs = minimize_cfg.get("kwargs") or {}
+        fmax = float(minimize_cfg.get("fmax", 0.05))
+        max_min_steps = int(minimize_cfg.get("max_steps", 500))
+        min_trajectory = minimize_cfg.get("trajectory", f"{filename}_min.traj")
         timestep = float(config.get("timestep", 1.0))
         temperature = float(config.get("temperature", 300.0))
         nsteps = int(config.get("nsteps", 1000))

@@ -59,7 +59,7 @@ def test_ase_calculator_matches_driver(water):
 def test_numerical_hessian_matches_analytic(water):
     # Hartree-Fock exchange: no integration grid, so the only difference is the finite-difference error
     analytic = make_driver(water, xc="HF").compute_hessian(hess_format="ase")
-    numerical_driver = make_driver(water, xc="HF", numerical_hess=True)
+    numerical_driver = make_driver(water, xc="HF", numerical_hessian=True)
     numerical = numerical_driver.compute_hessian(hess_format="ase")
     np.testing.assert_allclose(analytic, analytic.T, atol=1e-6)
     np.testing.assert_allclose(

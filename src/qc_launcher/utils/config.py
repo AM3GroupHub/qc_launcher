@@ -13,11 +13,27 @@ class ConfigDeprecationWarning(UserWarning):
 
 # section -> canonical key -> deprecated spellings that are still accepted
 DEPRECATED_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
-    "driver": {"threads": ("thread",)},
-    "driver.solvent": {"solvent_descriptors": ("solvent_descriptor",)},
+    "driver": {
+        "threads": ("thread",),
+        "verbosity": ("verbose",),
+        "scf_max_iter": ("scf_max_cycle", "max_iter"),
+        "dispersion": ("disp",),
+        "numerical_hessian": ("numerical_hess",),
+        "finite_diff_step": ("finite_diff_eps",),
+        "electronic_temperature": ("etemp",),
+        "solvation": ("solvent",),
+    },
+    "driver.solvation": {
+        "model": ("method",),
+        "epsilon": ("eps",),
+        "solvent_descriptors": ("solvent_descriptor",),
+    },
     "opt": {"delta0": ("delta",)},
+    "freq": {"bav": ("Bav",)},
+    "irc": {"trajectory": ("irc_trajectory",), "outputfile": ("irc_output",), "max_steps": ("steps",)},
     "md": {"tdamp": ("dtamp",)},
-    "neb": {"max_neb_steps": ("steps",)},
+    "neb": {"max_steps": ("max_neb_steps", "steps"), "endpoint_max_steps": ("max_opt_steps",)},
+    "autoneb": {"max_steps": ("max_neb_steps",), "endpoint_max_steps": ("max_opt_steps",)},
     # gsm keys follow the pygsm fork's parameter names (X1X1010/pygsm, snake_case API)
     "gsm": {
         "nnodes": ("num_nodes", "max_nodes"),
@@ -27,6 +43,7 @@ DEPRECATED_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
         "conv_gmax": ("fmax",),
         "conv_ediff": ("ediff",),
         "linesearch": ("line_search",),
+        "endpoint_max_steps": ("endpoint_opt_steps",),
     },
 }
 

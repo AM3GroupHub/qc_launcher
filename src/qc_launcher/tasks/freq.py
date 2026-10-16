@@ -45,9 +45,9 @@ def resolve_bav(value, mol, rot_const: np.ndarray) -> float:
         try:
             b_av = float(value)
         except (TypeError, ValueError):
-            raise ValueError(f"Invalid Bav {value!r}: use a number in kg m^2 or 'auto'.") from None
+            raise ValueError(f"Invalid bav {value!r}: use a number in kg m^2 or 'auto'.") from None
     if b_av < 1e-50:
-        print("Warning: Bav is very small, setting to 1e-50 to avoid numerical issues.")
+        print("Warning: bav is very small, setting to 1e-50 to avoid numerical issues.")
         b_av = 1e-50
     return b_av
 
@@ -76,7 +76,7 @@ def write_thermo_json(path: str, results: dict, frequencies_cm1: np.ndarray, qrr
 def run_freq(driver: BaseDriver, config: dict, filename: str = "molecule") -> dict:
     """Config keys (defaults): ``temperature`` [K] (298.15), ``pressure`` [Pa] (101325), ``vibfile``,
     ``save_hess`` (False), ``symm_geom_tol`` [Angstrom] (pyscf symmetry detection tolerance), ``qrrho`` (True),
-    ``alpha`` (4), ``omega0`` [cm^-1] (100), ``Bav`` [kg m^2] (1e-44, or "auto").
+    ``alpha`` (4), ``omega0`` [cm^-1] (100), ``bav`` [kg m^2] (1e-44, or "auto").
 
     Returns pyscf's thermo dict merged with the ``*_qrrho`` keys and writes ``{filename}_thermo.json``.
     Imaginary modes are reported but excluded from the thermochemistry.
@@ -89,7 +89,7 @@ def run_freq(driver: BaseDriver, config: dict, filename: str = "molecule") -> di
     qrrho = bool(config.get("qrrho", True))
     alpha = float(config.get("alpha", 4.0))
     omega0 = float(config.get("omega0", 100.0))
-    bav_setting = config.get("Bav", 1.0e-44)
+    bav_setting = config.get("bav", 1.0e-44)
     save_hess = bool(config.get("save_hess", False))
 
     with timed("Hessian computation"):
@@ -112,7 +112,7 @@ def run_freq(driver: BaseDriver, config: dict, filename: str = "molecule") -> di
         qrrho_params = None
         if qrrho:
             b_av = resolve_bav(bav_setting, mf.mol, thermo_info["rot_const"][0])
-            qrrho_params = {"alpha": alpha, "omega0_cm1": omega0, "Bav_kg_m2": b_av}
+            qrrho_params = {"alpha": alpha, "omega0_cm1": omega0, "bav_kg_m2": b_av}
             results.update(qrrho_thermo(thermo_info, freq_au, temperature, omega0, alpha, b_av))
             print("\n============== quasi-RRHO correction =============")
             print(f"alpha = {alpha:g}, omega0 = {omega0:g} cm^-1, Bav = {b_av:.4e} kg m^2")

@@ -10,6 +10,8 @@ from tblite.ase import TBLite, _create_api_calculator
 from tblite.exceptions import TBLiteRuntimeError
 from tblite.interface import Calculator, Result
 
+from qc_launcher.utils.config import rename_deprecated_keys
+
 from .base_driver import BaseDriver, dummy_pyscf_mf
 
 DEFAULT_EPSILON = 78.3553
@@ -96,7 +98,10 @@ def solvation_args(solvation: dict | None) -> tuple | None:
     """Translate the ``solvation`` block into tblite's ``(model, *args)`` tuple."""
     if solvation is None:
         return None
-    model = str(solvation["method"]).lower()
+    solvation = rename_deprecated_keys(solvation, "driver.solvation")
+    if "model" not in solvation:
+        raise ValueError("The solvation block needs a 'model' (alpb, gbsa, cpcm, gbe or gb).")
+    model = str(solvation["model"]).lower()
     if model in ("alpb", "gbsa"):
         return (model, solvation.get("solvent", "water"), solvation.get("solution_state", "gsolv"))
     if model == "cpcm":
@@ -116,8 +121,8 @@ def scc_settings(config: dict) -> dict:
         "method": config.get("method", "GFN2-xTB"),
         "accuracy": float(config.get("accuracy", 1.0)),
         "guess": guess,
-        "etemp": float(config.get("etemp", 298.15)),
-        "max_iter": int(config.get("max_iter", 250)),
+        "etemp": float(config.get("electronic_temperature", 298.15)),
+        "max_iter": int(config.get("scf_max_iter", 250)),
         "mixer_damping": float(config.get("mixer_damping", 0.4)),
         "verbosity": int(config.get("verbosity", 0)),
         "electric_field": None if electric_field is None else np.asarray(electric_field, dtype=float),
@@ -179,11 +184,11 @@ class TBLiteCalculator(TBLite):
 
 
 class TBLiteDriver(BaseDriver):
-    """Config keys (defaults): ``method`` (GFN2-xTB), ``accuracy`` (1.0), ``guess`` (sad | eeq), ``etemp`` [K]
-    (298.15), ``max_iter`` (250), ``mixer_damping`` (0.4), ``verbosity`` (0), ``electric_field`` [V/Angstrom],
-    ``spin_polarization``, ``solvation`` ({method: alpb | gbsa, solvent, solution_state} | {method: cpcm,
-    epsilon} | {method: gbe | gb, epsilon, born_kernel}), ``retry_annealing`` (False), ``annealing``
-    ({max_temp, heating_step, annealing_step} in K), ``finite_diff_eps`` [Angstrom] (5e-3).
+    """Config keys (defaults): ``method`` (GFN2-xTB), ``accuracy`` (1.0), ``guess`` (sad | eeq),
+    ``electronic_temperature`` [K] (298.15), ``scf_max_iter`` (250), ``mixer_damping`` (0.4), ``verbosity`` (0),
+    ``electric_field`` [V/Angstrom], ``spin_polarization``, ``solvation`` ({model: alpb | gbsa, solvent,
+    solution_state} | {model: cpcm, epsilon} | {model: gbe | gb, epsilon, born_kernel}), ``retry_annealing``
+    (False), ``annealing`` ({max_temp, heating_step, annealing_step} in K), ``finite_diff_step`` [Angstrom] (5e-3).
 
     SCC failures raise ``RuntimeError`` (after the annealing retry when enabled).
     """
@@ -292,7 +297,7 @@ class TBLiteDriver(BaseDriver):
         """Central differences of the gradient; (N, N, 3, 3) in Eh/Bohr^2, symmetrised."""
         self.update_atoms(atoms)
         natm = len(self.atoms)
-        eps = float(self.config.get("finite_diff_eps", 5e-3))  # Angstrom
+        eps = float(self.config.get("finite_diff_step", 5e-3))  # Angstrom
         positions0 = self.atoms.get_positions().copy()
         hessian = np.zeros((natm, natm, 3, 3))
         try:

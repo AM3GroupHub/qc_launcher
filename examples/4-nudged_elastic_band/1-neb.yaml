@@ -10,8 +10,8 @@ neb:
   num_images: 11
   fmax: 0.05
   climb: false
-  max_opt_steps: null
-  max_neb_steps: 200
+  endpoint_max_steps: null
+  max_steps: 200
   spring_constant: 0.1
   neb_method: improvedtangent
   fixed_reactant: false

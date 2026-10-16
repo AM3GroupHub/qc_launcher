@@ -13,21 +13,21 @@ DIRECTIONS = ("forward", "reverse", "both")
 
 
 def run_irc(driver: BaseDriver, config: dict, filename: str = "molecule") -> None:
-    """Config keys (defaults): ``irc_trajectory``, ``irc_output``, ``ninner_iter`` (10), ``dx`` [Angstrom] (0.1),
-    ``eta`` (1e-4), ``keep_going`` (False), ``diag_every_n``, ``fmax`` [eV/Angstrom], ``steps`` (10),
+    """Config keys (defaults): ``trajectory``, ``outputfile``, ``ninner_iter`` (10), ``dx`` [Angstrom] (0.1),
+    ``eta`` (1e-4), ``keep_going`` (False), ``diag_every_n``, ``fmax`` [eV/Angstrom], ``max_steps`` (10),
     ``direction`` (forward | reverse | both; ``backward`` is accepted for reverse).
     """
     with timed("IRC"):
         atoms = driver.atoms
-        irc_trajectory = config.get("irc_trajectory", f"{filename}_irc.traj")
-        irc_output = config.get("irc_output", f"{filename}_irc.xyz")
+        irc_trajectory = config.get("trajectory", f"{filename}_irc.traj")
+        irc_output = config.get("outputfile", f"{filename}_irc.xyz")
         ninner_iter = int(config.get("ninner_iter", 10))
         dx = float(config.get("dx", 0.1))
         eta = float(config.get("eta", 1e-4))
         keep_going = bool(config.get("keep_going", False))
         diag_every_n = config.get("diag_every_n")
         fmax_criterion = float(config.get("fmax", FMAX_DEFAULT))
-        steps = int(config.get("steps", 10))
+        steps = int(config.get("max_steps", 10))
         direction = str(config.get("direction", "both")).lower()
         if direction == "backward":
             direction = "reverse"

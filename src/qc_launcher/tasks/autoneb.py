@@ -18,8 +18,8 @@ from .common import check_same_species, relax_endpoints, write_path_results
 
 
 def run_autoneb(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filename: str = "molecule") -> None:
-    """Config keys (defaults): ``max_images`` (11), ``fmax`` (0.05), ``climb`` (False), ``max_neb_steps`` (200),
-    ``max_opt_steps`` (endpoint relaxation step limit), ``spring_constant`` (0.1), ``neb_method``
+    """Config keys (defaults): ``max_images`` (11), ``fmax`` (0.05), ``climb`` (False), ``max_steps`` (200),
+    ``endpoint_max_steps`` (endpoint relaxation step limit), ``spring_constant`` (0.1), ``neb_method``
     (improvedtangent), ``space_energy_ratio`` (0.5), ``smooth_curve`` (False), ``fixed_reactant`` /
     ``fixed_product`` (False), ``interpolate_method`` (idpp), ``scratch_dir`` (scratch), ``clear_scratch`` (False).
     Requires exactly two input frames.
@@ -30,8 +30,8 @@ def run_autoneb(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], f
     max_images = int(config.get("max_images", 11))
     fmax = float(config.get("fmax", 0.05))
     climb = bool(config.get("climb", False))
-    max_opt_steps = config.get("max_opt_steps")
-    max_neb_steps = int(config.get("max_neb_steps", 200))
+    max_opt_steps = config.get("endpoint_max_steps")
+    max_neb_steps = int(config.get("max_steps", 200))
     spring_constant = float(config.get("spring_constant", 0.1))
     neb_method = config.get("neb_method", "improvedtangent")
     space_energy_ratio = float(config.get("space_energy_ratio", 0.5))

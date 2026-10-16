@@ -61,7 +61,7 @@ def test_hessian_is_symmetric_and_matches_ase_differences(water):
 
 def test_scc_failure_raises(water):
     with pytest.raises(RuntimeError, match="did not converge"):
-        make_driver(water, max_iter=1).compute_energy()
+        make_driver(water, scf_max_iter=1).compute_energy()
 
 
 @pytest.mark.sella

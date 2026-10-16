@@ -48,3 +48,15 @@ def test_fixed_atom_zero_is_honoured(in_tmp, water):
     cli.main(["md", "run.yaml"])
     traj = ase.io.Trajectory("water_md.traj")
     assert (traj[0].positions[0] == traj[-1].positions[0]).all()
+
+
+def test_legacy_flat_minimize_keys_fold_into_block():
+    from qc_launcher.tasks.md import resolve_minimize_block
+
+    with pytest.warns(ConfigDeprecationWarning, match="minimize"):
+        minimize, block = resolve_minimize_block(
+            {"minimize": True, "optimizer": "LBFGS", "max_min_steps": 7, "min_trajectory": "m.traj"}
+        )
+    assert minimize and block == {"optimizer": "LBFGS", "max_steps": 7, "trajectory": "m.traj"}
+    assert resolve_minimize_block({"minimize": False}) == (False, {})
+    assert resolve_minimize_block({"minimize": {"fmax": 0.1}}) == (True, {"fmax": 0.1})

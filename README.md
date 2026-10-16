@@ -63,28 +63,28 @@ below), `forces: true` (print forces after the single point), and the task block
 | `xc` | `B3LYP` | any libxc name; names ending in `3c` (`B97-3c`, `r2SCAN-3c`) select a composite method via gpu4pyscf, which then sets basis / ECP / dispersion |
 | `basis`, `ecp` | `def2-SVP`, none | |
 | `restricted` | none | `true` RKS/ROKS, `false` UKS, unset: by spin |
-| `nlc`, `disp` | `''`, none | passed to the KS object |
+| `nlc`, `dispersion` | `''`, none | passed to the KS object |
 | `grids`, `nlcgrids` | pyscf defaults | `{atom_grid: ...}` or `{level: n}` |
 | `with_df`, `auxbasis` | `true`, none | density fitting |
 | `with_gpu` | `true` | falls back to CPU when cupy is missing |
-| `with_solvent`, `solvent` | `false` | `{method: IEF-PCM \| C-PCM \| SS(V)PE \| COSMO, eps: 78.4}` or `{..., solvent: water}` (184 Gaussian solvents), or `{method: SMD, solvent: water}` / `{method: SMD, solvent_descriptors: [...]}` |
+| `solvation` | none | `{model: IEF-PCM \| C-PCM \| SS(V)PE \| COSMO, epsilon: 78.4}` or `{model: ..., solvent: water}` (184 Gaussian solvents), or `{model: SMD, solvent: water}` / `{model: SMD, solvent_descriptors: [...]}` |
 | `scf_conv_tol`, `direct_scf_tol` | `1e-8`, `1e-8` | |
-| `scf_max_cycle`, `level_shift`, `diis_space` | `50`, `0`, `8` | |
+| `scf_max_iter`, `level_shift`, `diis_space` | `50`, `0`, `8` | |
 | `retry_soscf` | `false` | retry a non-converged SCF with second-order SCF |
 | `max_unconverged_steps` | none | warn after this many non-converged SCFs in an optimization |
-| `numerical_hess`, `finite_diff_eps` | `false`, `5e-3` Å | central differences of analytic gradients instead of the analytic Hessian |
-| `verbose`, `max_memory` (GB), `threads` | `2`, none, `OMP_NUM_THREADS` | |
+| `numerical_hessian`, `finite_diff_step` | `false`, `5e-3` Å | central differences of analytic gradients instead of the analytic Hessian |
+| `verbosity`, `max_memory` (GB), `threads` | `2`, none, `OMP_NUM_THREADS` | |
 
 **tblite**
 
 | Key | Default | Notes |
 |---|---|---|
 | `method` | `GFN2-xTB` | or `GFN1-xTB` |
-| `accuracy`, `guess`, `etemp` (K), `max_iter`, `mixer_damping`, `verbosity` | `1.0`, `sad`, `298.15`, `250`, `0.4`, `0` | |
+| `accuracy`, `guess`, `electronic_temperature` (K), `scf_max_iter`, `mixer_damping`, `verbosity` | `1.0`, `sad`, `298.15`, `250`, `0.4`, `0` | |
 | `electric_field` (V/Å), `spin_polarization` | none | |
-| `solvation` | none | `{method: alpb \| gbsa, solvent, solution_state}`, `{method: cpcm, epsilon}` or `{method: gbe \| gb, epsilon, born_kernel}` |
+| `solvation` | none | `{model: alpb \| gbsa, solvent, solution_state}`, `{model: cpcm, epsilon}` or `{model: gbe \| gb, epsilon, born_kernel}` |
 | `retry_annealing`, `annealing` | `false`, `{max_temp: 5000, heating_step: 300, annealing_step: 50}` | on SCC failure, converge at a higher electronic temperature and cool back down |
-| `finite_diff_eps` | `5e-3` Å | Hessians are central differences of the gradient |
+| `finite_diff_step` | `5e-3` Å | Hessians are central differences of the gradient |
 
 SCC failures raise an error (after the annealing retry when enabled).
 
@@ -105,7 +105,7 @@ Hessians come from MACE's analytic `get_hessian`.
 |---|---|---|
 | `model_path` | required | `atom_refs_path` defaults to `iso_atom_elem_refs.yaml` next to the model |
 | `task_name`, `device` | `omol`, auto | |
-| `finite_diff_eps`, `batch_size` | `5e-3` Å, `128` | Hessians are batched central differences of the predicted forces |
+| `finite_diff_step`, `batch_size` | `5e-3` Å, `128` | Hessians are batched central differences of the predicted forces |
 
 ### Tasks
 
@@ -116,15 +116,15 @@ Hessians come from MACE's analytic `get_hessian`.
 `frms` (eV/Å, RMS over all 3N components), `dmax` / `drms` (Å).
 
 **freq**: `temperature` (298.15 K), `pressure` (101325 Pa), `vibfile`, `save_hess` (false), `symm_geom_tol`
-(Å, pyscf symmetry detection tolerance), `qrrho` (true), `alpha` (4), `omega0` (100 cm⁻¹), `Bav` (1e-44 kg m²,
+(Å, pyscf symmetry detection tolerance), `qrrho` (true), `alpha` (4), `omega0` (100 cm⁻¹), `bav` (1e-44 kg m²,
 or `auto`). Writes `<stem>_vib.txt` (PyVibMS format) and `<stem>_thermo.json`. See *Thermochemistry* below.
 
-**irc** (Sella): `irc_trajectory`, `irc_output`, `ninner_iter` (10), `dx` (0.1 Å), `eta` (1e-4),
-`keep_going` (false), `diag_every_n`, `fmax`, `steps` (10), `direction` (`forward` | `reverse` | `both`).
+**irc** (Sella): `trajectory`, `outputfile`, `ninner_iter` (10), `dx` (0.1 Å), `eta` (1e-4), `keep_going`
+(false), `diag_every_n`, `fmax`, `max_steps` (10), `direction` (`forward` | `reverse` | `both`).
 
 **md** (ASE): `ensemble` (`NVE`, `Langevin`, `NVT` = Nosé–Hoover chain, `NPT` / `MTKNPT`, `IsotropicMTKNPT`,
-`MelchionnaNPT`), `minimize` (true) with `optimizer` (`FIRE` | `FIRE2` | `LBFGS`), `opt_kwargs`, `fmax`,
-`max_min_steps`, `min_trajectory`; `timestep` (1 fs), `temperature` (300 K), `nsteps` (1000), `loginterval`
+`MelchionnaNPT`); `minimize` (true, false, or a block `{optimizer: FIRE | FIRE2 | LBFGS, fmax, max_steps,
+trajectory, kwargs}` for the pre-minimization); `timestep` (1 fs), `temperature` (300 K), `nsteps` (1000), `loginterval`
 (100), `trajectory`, `logfile`, `append_trajectory`, `init_velocities`, `log_stress`, `seed`, `resume`.
 Langevin: `friction` (0.002 fs⁻¹). NVT/NPT: `tdamp`, `tchain`, `tloop`; MTK NPT: `pressure` (Pa), `pdamp`,
 `pchain`, `ploop`; Melchionna: `externalstress`, `mask`, `ttime`, `ptime`, `bulk_modulus` (GPa). Atoms with a
@@ -132,7 +132,7 @@ non-zero tag in the input are kept fixed. `resume: true` continues an existing t
 steps.
 
 **neb** (ASE NEB + FIRE): `num_images` (frames − 2), `fmax` (0.05), `climb` (false), `climb_after` (0),
-`max_neb_steps` (200), `max_opt_steps` (step limit of the endpoint relaxations), `spring_constant` (0.1),
+`max_steps` (200), `endpoint_max_steps` (step limit of the endpoint relaxations), `spring_constant` (0.1),
 `neb_method` (improvedtangent), `fixed_reactant` / `fixed_product`, `interpolate_method` (idpp), `trajectory`.
 
 **autoneb** (ASE AutoNEB): as `neb` plus `max_images` (11), `space_energy_ratio` (0.5), `smooth_curve`
@@ -142,7 +142,7 @@ steps.
 `coordinate_type` (`TRIC` | `DLC` | `HDLC`), `optimizer_method` (`eigenvector_follow` | `lbfgs`), `linesearch`
 (NoLineSearch), `ts_search` (`climb` | `exact` | `none`), `dmax` (0.1), `add_node_tol` (0.1), `conv_tol`
 (5e-4), `conv_ediff` / `conv_gmax` (100 = disabled; pygsm's own defaults are 0.1 / 0.001), `max_iters` (100
-GSM iterations), `opt_steps` (3 optimizer steps per GSM iteration), `endpoint_opt_steps` (100),
+GSM iterations), `opt_steps` (3 optimizer steps per GSM iteration), `endpoint_max_steps` (100),
 `fixed_reactant` / `fixed_product`, `string_id` (0), `output_dir`, `log_level`.
 
 **pysisyphus bridge**: in a pysisyphus YAML use
@@ -150,7 +150,7 @@ GSM iterations), `opt_steps` (3 optimizer steps per GSM iteration), `endpoint_op
 ```yaml
 calc:
   type: qc_launcher
-  driver: {name: tblite, method: GFN2-xTB}
+  driver: {name: tblite, method: GFN2-xTB, scf_max_iter: 100}
   charge: 0
   mult: 1
 ```
@@ -159,11 +159,19 @@ and run it with `qc_launch pysis run.yaml`.
 
 ### Deprecated keys
 
-Old spellings keep working and print a `ConfigDeprecationWarning`: driver `thread` → `threads`, solvent
-`solvent_descriptor` → `solvent_descriptors`, opt `delta` → `delta0`, md `dtamp` → `tdamp`, neb `steps` →
-`max_neb_steps`, gsm `num_nodes` / `max_nodes` → `nnodes`, `max_gsm_steps` / `max_cycles` → `max_iters`,
-`max_opt_steps` → `opt_steps`, `ID` → `string_id`, `fmax` → `conv_gmax`, `ediff` → `conv_ediff`,
-`line_search` → `linesearch`, `climb` → `ts_search`; irc `direction: backward` → `reverse`.
+Similar settings use the same name everywhere; the older spellings keep working and print a
+`ConfigDeprecationWarning`:
+
+| Block | Old | New |
+|---|---|---|
+| driver | `thread`, `verbose`, `scf_max_cycle` / `max_iter`, `disp`, `etemp`, `numerical_hess`, `finite_diff_eps` | `threads`, `verbosity`, `scf_max_iter`, `dispersion`, `electronic_temperature`, `numerical_hessian`, `finite_diff_step` |
+| driver | `with_solvent: true` + `solvent: {method, eps, solvent_descriptor}` | `solvation: {model, epsilon, solvent_descriptors}` (the block alone enables solvation) |
+| opt | `delta` | `delta0` |
+| freq | `Bav` | `bav` |
+| irc | `irc_trajectory`, `irc_output`, `steps`, `direction: backward` | `trajectory`, `outputfile`, `max_steps`, `direction: reverse` |
+| md | `dtamp`; flat `optimizer`, `fmax`, `max_min_steps`, `min_trajectory`, `opt_kwargs` | `tdamp`; `minimize: {optimizer, fmax, max_steps, trajectory, kwargs}` |
+| neb / autoneb | `max_neb_steps` / `steps`, `max_opt_steps` | `max_steps`, `endpoint_max_steps` |
+| gsm | `num_nodes` / `max_nodes`, `max_gsm_steps` / `max_cycles`, `max_opt_steps`, `ID`, `fmax`, `ediff`, `line_search`, `endpoint_opt_steps`, `climb` | `nnodes`, `max_iters`, `opt_steps`, `string_id`, `conv_gmax`, `conv_ediff`, `linesearch`, `endpoint_max_steps`, `ts_search` |
 
 ## Outputs
 
@@ -186,7 +194,7 @@ With `qrrho: true` the vibrational entropy uses Grimme's quasi-RRHO interpolatio
 9955: damping `w = 1 / (1 + (omega0 / omega)^alpha)` between the harmonic oscillator and a free rotor with
 moment of inertia `mu' = mu Bav / (mu + Bav)`), and the vibrational enthalpy uses the Head-Gordon damping of the
 ZPE-inclusive vibrational energy towards ½RT (Li et al., J. Phys. Chem. C 2015, 119, 1840), as in GoodVibes.
-`Bav: 1e-44` is Grimme's fixed value; `Bav: auto` uses the molecule's own isotropically averaged moment of
+`bav: 1e-44` is Grimme's fixed value; `bav: auto` uses the molecule's own isotropically averaged moment of
 inertia, which is what ORCA does. Printed `ZPE` and `E_0K` are always RRHO values.
 
 The implementation was checked against ORCA 6.0.1 (`QuasiRRHO true`, three molecules) and GoodVibes 4.4

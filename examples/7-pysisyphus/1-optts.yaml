@@ -3,7 +3,7 @@ calc:
   driver:
     name: tblite
     method: GFN2-xTB
-    max_iter: 100
+    scf_max_iter: 100
     verbosity: 0
   charge: 0
   mult: 1

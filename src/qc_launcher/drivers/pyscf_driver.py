@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from types import MethodType
 
 import numpy as np
@@ -11,7 +12,7 @@ from ase.calculators.calculator import Calculator, all_changes
 from ase.units import Bohr, Hartree
 from pyscf import dft, gto, lib
 
-from qc_launcher.utils.config import rename_deprecated_keys
+from qc_launcher.utils.config import ConfigDeprecationWarning, rename_deprecated_keys
 from qc_launcher.utils.utils import read_pcm_eps
 
 from .base_driver import BaseDriver
@@ -90,14 +91,13 @@ class PySCFCalculator(Calculator):
 class PySCFDriver(BaseDriver):
     """Kohn-Sham DFT with pyscf (CPU) or gpu4pyscf (GPU), density fitting and PCM/SMD solvation.
 
-    Config keys (defaults): ``xc`` (B3LYP; names ending in ``3c`` select a composite method via
-    gpu4pyscf), ``basis`` (def2-SVP), ``ecp``, ``restricted`` (None: by spin), ``nlc`` (''), ``disp``,
-    ``grids`` / ``nlcgrids`` ({atom_grid: ...} or {level: n}), ``verbose`` (2), ``max_memory`` [GB],
-    ``threads``, ``scf_conv_tol`` (1e-8), ``direct_scf_tol`` (1e-8), ``scf_max_cycle`` (50),
-    ``level_shift`` (0), ``diis_space`` (8), ``with_df`` (True), ``auxbasis``, ``with_gpu`` (True),
-    ``with_solvent`` (False), ``solvent`` ({method, eps | solvent | solvent_descriptors}),
-    ``retry_soscf`` (False), ``max_unconverged_steps``, ``numerical_hess`` (False),
-    ``finite_diff_eps`` (5e-3 Angstrom).
+    Config keys (defaults): ``xc`` (B3LYP; names ending in ``3c`` select a composite method via gpu4pyscf),
+    ``basis`` (def2-SVP), ``ecp``, ``restricted`` (None: by spin), ``nlc`` (''), ``dispersion``, ``grids`` /
+    ``nlcgrids`` ({atom_grid: ...} or {level: n}), ``verbosity`` (2), ``max_memory`` [GB], ``threads``,
+    ``scf_conv_tol`` (1e-8), ``direct_scf_tol`` (1e-8), ``scf_max_iter`` (50), ``level_shift`` (0),
+    ``diis_space`` (8), ``with_df`` (True), ``auxbasis``, ``with_gpu`` (True), ``solvation`` ({model: ief-pcm |
+    c-pcm | ss(v)pe | cosmo | smd, solvent | epsilon | solvent_descriptors}), ``retry_soscf`` (False),
+    ``max_unconverged_steps``, ``numerical_hessian`` (False), ``finite_diff_step`` (5e-3 Angstrom).
     """
 
     def __init__(self, atoms: Atoms | None, config: dict, **kwargs):
@@ -121,7 +121,7 @@ class PySCFDriver(BaseDriver):
             charge=int(self.atoms.info.get("charge", 0)),  # plain ints: ASE may hand us numpy integers
             spin=int(self.atoms.info.get("multiplicity", 1)) - 1,
             max_memory=None if max_memory is None else float(max_memory) * 1024,  # GB -> MB
-            verbose=int(config.get("verbose", 2)),
+            verbose=int(config.get("verbosity", 2)),
         )
 
     def _build_mf(self, config: dict):
@@ -136,7 +136,7 @@ class PySCFDriver(BaseDriver):
             mf = dft.KS(mol, xc=xc)
         nlc = config.get("nlc", "")
         mf.nlc = nlc
-        mf.disp = config.get("disp")
+        mf.disp = config.get("dispersion")
         grids = config.get("grids")
         if grids:
             if "atom_grid" in grids:
@@ -159,45 +159,56 @@ class PySCFDriver(BaseDriver):
             else:
                 cupy.get_default_memory_pool().free_all_blocks()
                 mf = mf.to_gpu()
-        if config.get("with_solvent", False):
-            mf = self._apply_solvent(mf, config.get("solvent", {"method": "ief-pcm", "eps": 78.3553}))
+        solvation = config.get("solvation")
+        with_solvent = config.get("with_solvent")
+        if with_solvent is not None:
+            warnings.warn(
+                "[driver] key 'with_solvent' is deprecated; a 'solvation' block alone enables solvation.",
+                ConfigDeprecationWarning,
+            )
+            if with_solvent and solvation is None:
+                solvation = {"model": "ief-pcm", "epsilon": 78.3553}
+            elif not with_solvent:
+                solvation = None
+        if solvation:
+            mf = self._apply_solvent(mf, solvation)
         mf.conv_tol = float(config.get("scf_conv_tol", 1e-8))
         mf.direct_scf_tol = float(config.get("direct_scf_tol", 1e-8))
-        mf.max_cycle = int(config.get("scf_max_cycle", 50))
+        mf.max_cycle = int(config.get("scf_max_iter", 50))
         mf.level_shift = float(config.get("level_shift", 0.0))
         mf.diis_space = int(config.get("diis_space", 8))
         mf.chkfile = None
         return mf
 
-    def _apply_solvent(self, mf, solvent: dict):
-        solvent = rename_deprecated_keys(solvent, "driver.solvent")
-        method = str(solvent.get("method", "ief-pcm"))
-        if method.lower() in PCM_METHODS:
+    def _apply_solvent(self, mf, solvation: dict):
+        solvation = rename_deprecated_keys(solvation, "driver.solvation")
+        model = str(solvation.get("model", "ief-pcm"))
+        if model.lower() in PCM_METHODS:
             mf = mf.PCM()
             mf.with_solvent.lebedev_order = 29
-            mf.with_solvent.method = method
-            if "eps" in solvent:
-                mf.with_solvent.eps = float(solvent["eps"])
-            elif "solvent" in solvent:
+            mf.with_solvent.method = model
+            if "epsilon" in solvation:
+                mf.with_solvent.eps = float(solvation["epsilon"])
+            elif "solvent" in solvation:
                 eps_table = read_pcm_eps()
-                name = str(solvent["solvent"]).lower()
+                name = str(solvation["solvent"]).lower()
                 if name not in eps_table:
-                    raise ValueError(f"Unknown PCM solvent '{solvent['solvent']}'; give 'eps' explicitly.")
+                    raise ValueError(f"Unknown PCM solvent '{solvation['solvent']}'; give 'epsilon' explicitly.")
                 mf.with_solvent.eps = eps_table[name]
             else:
-                raise ValueError("For PCM solvation, specify either 'eps' or 'solvent' in the solvent block.")
-        elif method.lower() == "smd":
+                raise ValueError("For PCM solvation, specify either 'epsilon' or 'solvent' in the solvation block.")
+        elif model.lower() == "smd":
             mf = mf.SMD()
             mf.with_solvent.lebedev_order = 29
             mf.with_solvent.method = "SMD"
-            if "solvent_descriptors" in solvent:
-                mf.with_solvent.solvent_descriptors = solvent["solvent_descriptors"]
-            elif "solvent" in solvent:
-                mf.with_solvent.solvent = solvent["solvent"]
+            if "solvent_descriptors" in solvation:
+                mf.with_solvent.solvent_descriptors = solvation["solvent_descriptors"]
+            elif "solvent" in solvation:
+                mf.with_solvent.solvent = solvation["solvent"]
             else:
                 raise ValueError("For SMD solvation, specify either 'solvent_descriptors' or 'solvent'.")
         else:
-            raise ValueError(f"Unknown solvent method '{method}'. Use one of {PCM_METHODS} or 'smd'.")
+            raise ValueError(f"Unknown solvation model '{model}'. Use one of {PCM_METHODS} or 'smd'.")
         return mf
 
     def build_method(self):
@@ -319,8 +330,8 @@ class PySCFDriver(BaseDriver):
 
     def _compute_hessian_impl(self, atoms: Atoms | None) -> np.ndarray:
         self.run_kernel(atoms)
-        if self.config.get("numerical_hess", False):
-            step = float(self.config.get("finite_diff_eps", 5e-3)) / Bohr  # Angstrom -> Bohr
+        if self.config.get("numerical_hessian", False):
+            step = float(self.config.get("finite_diff_step", 5e-3)) / Bohr  # Angstrom -> Bohr
             try:
                 return _finite_difference_hessian(self.build_gradient_method(), step)
             finally:

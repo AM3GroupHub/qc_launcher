@@ -3,7 +3,7 @@ inputfile: water_box.xyz
 driver:
   name: tblite
   method: GFN2-xTB
-  max_iter: 250
+  scf_max_iter: 250
   retry_annealing: true
 
 md:

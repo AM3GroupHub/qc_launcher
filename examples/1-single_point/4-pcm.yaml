@@ -6,11 +6,10 @@ driver:
   basis: def2-TZVP
   with_df: false
   with_gpu: false
-  with_solvent: true
-  solvent:
-    method: IEF-PCM  # C-PCM; SS(V)PE; COSMO
+  solvation:
+    model: IEF-PCM  # C-PCM; SS(V)PE; COSMO
     solvent: water  # comment this line
-    # eps: 78.4  # and uncomment this line to specify the dielectric constant
+    # epsilon: 78.4  # and uncomment this line to specify the dielectric constant
   threads: 4
   max_memory: 1  # GB
 

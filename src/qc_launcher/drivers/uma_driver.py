@@ -16,7 +16,7 @@ from .calc_driver import CalculatorDriver
 
 class UMADriver(CalculatorDriver):
     """Config keys (defaults): ``model_path`` (required), ``atom_refs_path`` (``iso_atom_elem_refs.yaml`` next
-    to the model, if present), ``task_name`` ('omol'), ``device`` (auto), ``finite_diff_eps`` [Angstrom]
+    to the model, if present), ``task_name`` ('omol'), ``device`` (auto), ``finite_diff_step`` [Angstrom]
     (5e-3), ``batch_size`` (128) for the finite-difference Hessian.
     """
 
@@ -34,7 +34,7 @@ class UMADriver(CalculatorDriver):
     def _compute_hessian_impl(self, atoms: Atoms | None) -> np.ndarray:
         """Central differences of the predicted forces, batched through the predictor; (3N, 3N) in eV/Ang^2."""
         self.update_atoms(atoms)
-        eps = float(self.config.get("finite_diff_eps", 5e-3))
+        eps = float(self.config.get("finite_diff_step", 5e-3))
         batch_size = int(self.config.get("batch_size", 128))
         natm = len(self.atoms)
         data_list = []

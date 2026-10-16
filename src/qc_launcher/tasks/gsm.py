@@ -97,7 +97,7 @@ def run_gsm(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filen
     (eigenvector_follow | lbfgs), ``linesearch`` (NoLineSearch), ``ts_search`` (climb | exact | none), ``dmax``
     (0.1), ``add_node_tol`` (0.1), ``conv_tol`` (5e-4), ``conv_ediff`` / ``conv_gmax`` (100, i.e. disabled;
     pygsm's own defaults are 0.1 / 0.001), ``max_iters`` (100 GSM iterations), ``opt_steps`` (3 optimizer steps
-    per GSM iteration), ``endpoint_opt_steps`` (100), ``fixed_reactant`` / ``fixed_product`` (False),
+    per GSM iteration), ``endpoint_max_steps`` (100), ``fixed_reactant`` / ``fixed_product`` (False),
     ``string_id`` (0), ``output_dir``, ``log_level`` (INFO). Old spellings (num_nodes, max_gsm_steps,
     max_opt_steps, ID, fmax, ediff, line_search) are accepted with a deprecation warning.
     Requires exactly two input frames (reactant, product).
@@ -126,7 +126,7 @@ def run_gsm(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filen
     string_id = int(config.get("string_id", 0))
     max_iters = int(config.get("max_iters", 100))
     opt_steps = int(config.get("opt_steps", 3))
-    endpoint_opt_steps = int(config.get("endpoint_opt_steps", 100))
+    endpoint_opt_steps = int(config.get("endpoint_max_steps", 100))
     fixed_reactant = bool(config.get("fixed_reactant", False))
     fixed_product = bool(config.get("fixed_product", False))
     output_dir = config.get("output_dir")  # writes string_<ID>.xyz checkpoints when set
