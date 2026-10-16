@@ -17,4 +17,4 @@ freq:
   qrrho: true
   alpha: 4.0
   omega0: 100.0
-  bav: 1.0e-44  # kg m^2 (Grimme); or "auto" for the molecule's own Tr(I)/3 (ORCA)
+  Bav: 1.0e-44  # kg m^2 (Grimme); or "auto" for the molecule's own Tr(I)/3 (ORCA)

@@ -116,7 +116,7 @@ Hessians come from MACE's analytic `get_hessian`.
 `frms` (eV/Å, RMS over all 3N components), `dmax` / `drms` (Å).
 
 **freq**: `temperature` (298.15 K), `pressure` (101325 Pa), `vibfile`, `save_hess` (false), `symm_geom_tol`
-(Å, pyscf symmetry detection tolerance), `qrrho` (true), `alpha` (4), `omega0` (100 cm⁻¹), `bav` (1e-44 kg m²,
+(Å, pyscf symmetry detection tolerance), `qrrho` (true), `alpha` (4), `omega0` (100 cm⁻¹), `Bav` (1e-44 kg m²,
 or `auto`). Writes `<stem>_vib.txt` (PyVibMS format) and `<stem>_thermo.json`. See *Thermochemistry* below.
 
 **irc** (Sella): `trajectory`, `outputfile`, `ninner_iter` (10), `dx` (0.1 Å), `eta` (1e-4), `keep_going`
@@ -167,7 +167,7 @@ Similar settings use the same name everywhere; the older spellings keep working 
 | driver | `thread`, `verbose`, `scf_max_cycle` / `max_iter`, `disp`, `etemp`, `numerical_hess`, `finite_diff_eps` | `threads`, `verbosity`, `scf_max_iter`, `dispersion`, `electronic_temperature`, `numerical_hessian`, `finite_diff_step` |
 | driver | `with_solvent: true` + `solvent: {method, eps, solvent_descriptor}` | `solvation: {model, epsilon, solvent_descriptors}` (the block alone enables solvation) |
 | opt | `delta` | `delta0` |
-| freq | `Bav` | `bav` |
+| freq | `bav` | `Bav` |
 | irc | `irc_trajectory`, `irc_output`, `steps`, `direction: backward` | `trajectory`, `outputfile`, `max_steps`, `direction: reverse` |
 | md | `dtamp`; flat `optimizer`, `fmax`, `max_min_steps`, `min_trajectory`, `opt_kwargs` | `tdamp`; `minimize: {optimizer, fmax, max_steps, trajectory, kwargs}` |
 | neb / autoneb | `max_neb_steps` / `steps`, `max_opt_steps` | `max_steps`, `endpoint_max_steps` |
@@ -194,7 +194,7 @@ With `qrrho: true` the vibrational entropy uses Grimme's quasi-RRHO interpolatio
 9955: damping `w = 1 / (1 + (omega0 / omega)^alpha)` between the harmonic oscillator and a free rotor with
 moment of inertia `mu' = mu Bav / (mu + Bav)`), and the vibrational enthalpy uses the Head-Gordon damping of the
 ZPE-inclusive vibrational energy towards ½RT (Li et al., J. Phys. Chem. C 2015, 119, 1840), as in GoodVibes.
-`bav: 1e-44` is Grimme's fixed value; `bav: auto` uses the molecule's own isotropically averaged moment of
+`Bav: 1e-44` is Grimme's fixed value; `Bav: auto` uses the molecule's own isotropically averaged moment of
 inertia, which is what ORCA does. Printed `ZPE` and `E_0K` are always RRHO values.
 
 The implementation was checked against ORCA 6.0.1 (`QuasiRRHO true`, three molecules) and GoodVibes 4.4

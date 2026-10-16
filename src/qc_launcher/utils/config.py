@@ -29,7 +29,7 @@ DEPRECATED_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
         "solvent_descriptors": ("solvent_descriptor",),
     },
     "opt": {"delta0": ("delta",)},
-    "freq": {"bav": ("Bav",)},
+    "freq": {"Bav": ("bav",)},
     "irc": {"trajectory": ("irc_trajectory",), "outputfile": ("irc_output",), "max_steps": ("steps",)},
     "md": {"tdamp": ("dtamp",)},
     "neb": {"max_steps": ("max_neb_steps", "steps"), "endpoint_max_steps": ("max_opt_steps",)},

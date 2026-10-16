@@ -71,7 +71,7 @@ def test_gsm_keys_follow_pygsm_names():
             {"scf_max_iter": 30, "electronic_temperature": 500.0, "solvation": {"method": "smd"}},
         ),
         ("driver.solvation", {"method": "cpcm", "eps": 4.0}, {"model": "cpcm", "epsilon": 4.0}),
-        ("freq", {"Bav": "auto"}, {"bav": "auto"}),
+        ("freq", {"bav": "auto"}, {"Bav": "auto"}),
         (
             "irc",
             {"irc_trajectory": "a.traj", "irc_output": "a.xyz", "steps": 5},
