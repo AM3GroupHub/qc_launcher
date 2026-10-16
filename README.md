@@ -138,11 +138,12 @@ steps.
 **autoneb** (ASE AutoNEB): as `neb` plus `max_images` (11), `space_energy_ratio` (0.5), `smooth_curve`
 (false), `scratch_dir` (`scratch`), `clear_scratch` (false).
 
-**gsm** (pygsm, double-ended): `num_nodes` (11), `coordinate_type` (`TRIC` | `DLC` | `HDLC`),
-`optimizer_method` (`eigenvector_follow` | `lbfgs`), `line_search`, `ts_search` (`climb` | `exact` | `none`),
-`dmax` (0.1), `add_node_tol` (0.1), `conv_tol` (5e-4), `ediff` / `fmax` (100 = disabled; pygsm's own defaults
-are 0.1 / 0.001), `max_gsm_steps` (100), `max_opt_steps` (3 optimizer steps per GSM iteration),
-`endpoint_opt_steps` (100), `fixed_reactant` / `fixed_product`, `ID`, `output_dir`, `log_level`.
+**gsm** (pygsm, double-ended; keys follow the pygsm fork's parameter names): `nnodes` (11),
+`coordinate_type` (`TRIC` | `DLC` | `HDLC`), `optimizer_method` (`eigenvector_follow` | `lbfgs`), `linesearch`
+(NoLineSearch), `ts_search` (`climb` | `exact` | `none`), `dmax` (0.1), `add_node_tol` (0.1), `conv_tol`
+(5e-4), `conv_ediff` / `conv_gmax` (100 = disabled; pygsm's own defaults are 0.1 / 0.001), `max_iters` (100
+GSM iterations), `opt_steps` (3 optimizer steps per GSM iteration), `endpoint_opt_steps` (100),
+`fixed_reactant` / `fixed_product`, `string_id` (0), `output_dir`, `log_level`.
 
 **pysisyphus bridge**: in a pysisyphus YAML use
 
@@ -160,8 +161,9 @@ and run it with `qc_launch pysis run.yaml`.
 
 Old spellings keep working and print a `ConfigDeprecationWarning`: driver `thread` → `threads`, solvent
 `solvent_descriptor` → `solvent_descriptors`, opt `delta` → `delta0`, md `dtamp` → `tdamp`, neb `steps` →
-`max_neb_steps`, gsm `max_nodes` → `num_nodes`, `max_cycles` → `max_gsm_steps`, gsm `climb` → `ts_search`,
-irc `direction: backward` → `reverse`.
+`max_neb_steps`, gsm `num_nodes` / `max_nodes` → `nnodes`, `max_gsm_steps` / `max_cycles` → `max_iters`,
+`max_opt_steps` → `opt_steps`, `ID` → `string_id`, `fmax` → `conv_gmax`, `ediff` → `conv_ediff`,
+`line_search` → `linesearch`, `climb` → `ts_search`; irc `direction: backward` → `reverse`.
 
 ## Outputs
 

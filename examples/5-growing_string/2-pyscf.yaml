@@ -12,15 +12,15 @@ driver:
 
 gsm:
   gsm_type: DE_GSM
-  num_nodes: 9
+  nnodes: 9
   coordinate_type: DLC
   optimizer_method: lbfgs
-  line_search: NoLineSearch
+  linesearch: NoLineSearch
   ts_search: climb  # none, climb (climbing image), exact (climbing image + exact TS search)
-  fmax: 0.05
+  conv_gmax: 0.05
   dmax: 0.1
-  max_gsm_steps: 80
-  max_opt_steps: 3
+  max_iters: 80
+  opt_steps: 3
   fixed_reactant: true
   fixed_product: true
 

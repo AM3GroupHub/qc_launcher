@@ -18,7 +18,16 @@ DEPRECATED_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "opt": {"delta0": ("delta",)},
     "md": {"tdamp": ("dtamp",)},
     "neb": {"max_neb_steps": ("steps",)},
-    "gsm": {"num_nodes": ("max_nodes",), "max_gsm_steps": ("max_cycles",)},
+    # gsm keys follow the pygsm fork's parameter names (X1X1010/pygsm, snake_case API)
+    "gsm": {
+        "nnodes": ("num_nodes", "max_nodes"),
+        "max_iters": ("max_gsm_steps", "max_cycles"),
+        "opt_steps": ("max_opt_steps",),
+        "string_id": ("ID",),
+        "conv_gmax": ("fmax",),
+        "conv_ediff": ("ediff",),
+        "linesearch": ("line_search",),
+    },
 }
 
 

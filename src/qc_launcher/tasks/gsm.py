@@ -92,12 +92,14 @@ def write_results(gsm, reactant: Atoms, filename: str) -> None:
 
 
 def run_gsm(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filename: str = "molecule") -> None:
-    """Config keys (defaults): ``gsm_type`` (DE_GSM; SE_GSM is not implemented), ``num_nodes`` (11),
-    ``coordinate_type`` (TRIC | DLC | HDLC), ``optimizer_method`` (eigenvector_follow | lbfgs), ``line_search``
-    (NoLineSearch), ``ts_search`` (climb | exact | none), ``dmax`` (0.1), ``add_node_tol`` (0.1), ``conv_tol``
-    (5e-4), ``ediff`` / ``fmax`` (100, i.e. disabled; pygsm's own defaults are 0.1 / 0.001), ``max_gsm_steps``
-    (100), ``max_opt_steps`` (3; optimizer steps per GSM iteration), ``endpoint_opt_steps`` (100),
-    ``fixed_reactant`` / ``fixed_product`` (False), ``ID`` (0), ``output_dir``, ``log_level`` (INFO).
+    """Config keys follow the pygsm fork's parameter names (defaults): ``gsm_type`` (DE_GSM; SE_GSM is not
+    implemented), ``nnodes`` (11), ``coordinate_type`` (TRIC | DLC | HDLC), ``optimizer_method``
+    (eigenvector_follow | lbfgs), ``linesearch`` (NoLineSearch), ``ts_search`` (climb | exact | none), ``dmax``
+    (0.1), ``add_node_tol`` (0.1), ``conv_tol`` (5e-4), ``conv_ediff`` / ``conv_gmax`` (100, i.e. disabled;
+    pygsm's own defaults are 0.1 / 0.001), ``max_iters`` (100 GSM iterations), ``opt_steps`` (3 optimizer steps
+    per GSM iteration), ``endpoint_opt_steps`` (100), ``fixed_reactant`` / ``fixed_product`` (False),
+    ``string_id`` (0), ``output_dir``, ``log_level`` (INFO). Old spellings (num_nodes, max_gsm_steps,
+    max_opt_steps, ID, fmax, ediff, line_search) are accepted with a deprecation warning.
     Requires exactly two input frames (reactant, product).
     """
     gsm_type = config.get("gsm_type", "DE_GSM")
@@ -112,18 +114,18 @@ def run_gsm(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filen
     optimizer_method = config.get("optimizer_method", "eigenvector_follow")
     if optimizer_method not in OPTIMIZERS:
         raise ValueError(f"Unsupported optimizer_method: {optimizer_method}. Supported methods are {list(OPTIMIZERS)}.")
-    line_search = config.get("line_search", "NoLineSearch")
+    linesearch = config.get("linesearch", "NoLineSearch")
     ts_search = resolve_ts_search(config)
     dmax = float(config.get("dmax", 0.1))
     coordinate_type = config.get("coordinate_type", "TRIC")
-    num_nodes = int(config.get("num_nodes", 11))
+    nnodes = int(config.get("nnodes", 11))
     add_node_tol = float(config.get("add_node_tol", 0.1))
     conv_tol = float(config.get("conv_tol", 5e-4))
-    ediff = float(config.get("ediff", 100.0))
-    fmax = float(config.get("fmax", 100.0))
-    string_id = config.get("ID", 0)
-    max_gsm_steps = int(config.get("max_gsm_steps", 100))
-    max_opt_steps = int(config.get("max_opt_steps", 3))
+    conv_ediff = float(config.get("conv_ediff", 100.0))
+    conv_gmax = float(config.get("conv_gmax", 100.0))
+    string_id = int(config.get("string_id", 0))
+    max_iters = int(config.get("max_iters", 100))
+    opt_steps = int(config.get("opt_steps", 3))
     endpoint_opt_steps = int(config.get("endpoint_opt_steps", 100))
     fixed_reactant = bool(config.get("fixed_reactant", False))
     fixed_product = bool(config.get("fixed_product", False))
@@ -143,25 +145,25 @@ def run_gsm(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filen
         coord_obj=deloc_coords,
         form_hessian=optimizer_method == "eigenvector_follow",
     )
-    molecule_product = Molecule.copy_from(molecule_reactant, xyz=product.get_positions(), new_node_id=num_nodes - 1)
+    molecule_product = Molecule.copy_from(molecule_reactant, xyz=product.get_positions(), new_node_id=nnodes - 1)
 
     output.printcool("Building optimizer")
     optimizer = OPTIMIZERS[optimizer_method](
         print_level=1,
-        linesearch=line_search,
+        linesearch=linesearch,
         update_hess_in_bg=not (ts_search == "climb" or optimizer_method == "lbfgs"),
-        conv_ediff=ediff,
-        conv_gmax=fmax,
+        conv_ediff=conv_ediff,
+        conv_gmax=conv_gmax,
         dmax=dmax,
     )
     output.printcool("Building GSM object")
     gsm = DEGSM(
         reactant=molecule_reactant,
         product=molecule_product,
-        nnodes=num_nodes,
+        nnodes=nnodes,
         conv_tol=conv_tol,
-        conv_gmax=fmax,
-        conv_ediff=ediff,
+        conv_gmax=conv_gmax,
+        conv_ediff=conv_ediff,
         add_node_tol=add_node_tol,
         growth_direction=0,
         optimizer=optimizer,
@@ -181,5 +183,5 @@ def run_gsm(driver: BaseDriver, config: dict, atoms_list: Sequence[Atoms], filen
             optimizer.optimize(molecule=molecule, ref_energy=molecule.energy, opt_steps=endpoint_opt_steps)
 
     output.printcool("Running GSM")
-    gsm.go_gsm(max_iters=max_gsm_steps, opt_steps=max_opt_steps, rtype=TS_SEARCH_RTYPE[ts_search])
+    gsm.go_gsm(max_iters=max_iters, opt_steps=opt_steps, rtype=TS_SEARCH_RTYPE[ts_search])
     write_results(gsm, reactant, filename)

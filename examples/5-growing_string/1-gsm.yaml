@@ -8,15 +8,15 @@ driver:
 
 gsm:
   gsm_type: DE_GSM
-  num_nodes: 9
+  nnodes: 9
   coordinate_type: DLC  # DLC, TRIC, HDLC
   optimizer_method: eigenvector_follow
-  line_search: NoLineSearch
+  linesearch: NoLineSearch
   ts_search: climb  # none, climb (climbing image), exact (climbing image + exact TS search)
-  fmax: 0.05
+  conv_gmax: 0.05
   dmax: 0.1
-  max_gsm_steps: 100
-  max_opt_steps: 3
+  max_iters: 100
+  opt_steps: 3
   fixed_reactant: false
   fixed_product: false
 

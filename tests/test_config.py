@@ -24,3 +24,28 @@ def test_untouched_config_is_copied():
 def test_unknown_section_and_none():
     assert rename_deprecated_keys({"a": 1}, "nope") == {"a": 1}
     assert rename_deprecated_keys(None, "md") == {}
+
+
+def test_gsm_keys_follow_pygsm_names():
+    old = {
+        "num_nodes": 9,
+        "max_gsm_steps": 50,
+        "max_opt_steps": 2,
+        "ID": 3,
+        "fmax": 0.05,
+        "ediff": 0.1,
+        "line_search": "backtrack",
+    }
+    with pytest.warns(ConfigDeprecationWarning):
+        result = rename_deprecated_keys(old, "gsm")
+    assert result == {
+        "nnodes": 9,
+        "max_iters": 50,
+        "opt_steps": 2,
+        "string_id": 3,
+        "conv_gmax": 0.05,
+        "conv_ediff": 0.1,
+        "linesearch": "backtrack",
+    }
+    with pytest.warns(ConfigDeprecationWarning):
+        assert rename_deprecated_keys({"max_nodes": 7}, "gsm") == {"nnodes": 7}
