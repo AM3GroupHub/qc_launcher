@@ -45,7 +45,8 @@ def main(argv=None) -> int:
     for method in args.methods:
         results = {}
         for backend in args.backends:
-            frozen = False if args.all_electron or (backend == "byteqc" and method == "mp2") else True
+            # ByteQC DF-MP2 has no frozen core: when it takes part, compare all-electron MP2 on every backend
+            frozen = not (args.all_electron or (method == "mp2" and "byteqc" in args.backends))
             config = {
                 "backend": backend,
                 "python": args.python,
