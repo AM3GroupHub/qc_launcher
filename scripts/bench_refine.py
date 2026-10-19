@@ -36,6 +36,8 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--scf-gpu", action="store_true", help="run the reference SCF with ByteQC cuobc (byteqc backend)"
     )
+    parser.add_argument("--gpu-memory-gb", type=float, default=None, help="ByteQC CCSD GPU buffer limit")
+    parser.add_argument("--cpu-memory-gb", type=float, default=None, help="ByteQC CCSD host buffer limit")
     args = parser.parse_args(argv)
 
     atoms = ase.io.read(args.xyz)
@@ -55,6 +57,8 @@ def main(argv=None) -> int:
                 "frozen_core": frozen,
                 "ngpu": args.ngpu,
                 "scf": {"gpu": args.scf_gpu and backend == "byteqc"},
+                "gpu_memory_gb": args.gpu_memory_gb,
+                "cpu_memory_gb": args.cpu_memory_gb,
                 "verbose": 3,
             }
             t0 = time.time()
