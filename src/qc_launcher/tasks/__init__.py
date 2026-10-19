@@ -19,6 +19,7 @@ _TASKS: dict[str, tuple[str, str]] = {
     "autoneb": ("autoneb", "run_autoneb"),
     "gsm": ("gsm", "run_gsm"),
     "md": ("md", "run_md"),
+    "refine": ("refine", "run_refine"),
 }
 
 # task name -> (import name, extra name, install hint)

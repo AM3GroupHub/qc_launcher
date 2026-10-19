@@ -28,11 +28,34 @@ DEFAULT_MODEL_PATHS = {
 }
 
 
+_BYTEQC_PROBE: dict[str, str | None] = {}
+
+
+def byteqc_python() -> str | None:
+    """Interpreter of a ByteQC environment (QC_LAUNCHER_BYTEQC_PYTHON) that imports byteqc, else None."""
+    if "result" not in _BYTEQC_PROBE:
+        python = os.environ.get("QC_LAUNCHER_BYTEQC_PYTHON")
+        ok = False
+        if python and Path(python).exists():
+            import subprocess
+
+            ok = (
+                subprocess.run(
+                    [python, "-c", "import byteqc.cucc, byteqc.cump2"], capture_output=True, timeout=600
+                ).returncode
+                == 0
+            )
+        _BYTEQC_PROBE["result"] = python if ok else None
+    return _BYTEQC_PROBE["result"]
+
+
 def pytest_collection_modifyitems(config, items):
     for item in items:
         for marker, package in MARKER_PACKAGES.items():
             if item.get_closest_marker(marker) and importlib.util.find_spec(package) is None:
                 item.add_marker(pytest.mark.skip(reason=f"{package} is not installed"))
+        if item.get_closest_marker("byteqc") and byteqc_python() is None:
+            item.add_marker(pytest.mark.skip(reason="QC_LAUNCHER_BYTEQC_PYTHON does not point at a ByteQC environment"))
 
 
 def _model_path(kind: str) -> str:
