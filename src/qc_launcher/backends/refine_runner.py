@@ -79,6 +79,23 @@ def _versions(backend: str) -> dict:
     return versions
 
 
+def _patch_byteqc_df_eris() -> None:
+    """Work around a ByteQC DF-CCSD bug with frozen orbitals: ``_make_df_eris`` reuses the previous block's Lpq
+    buffer (sized naux_block * nmo * nmo) as the unpack buffer of the next block (naux_block * nao * nao); with a
+    frozen core nmo < nao, so the second DF block fails with 'buf is not enough'. Allocate per block instead."""
+    from byteqc.cucc import dfccsd
+
+    original = dfccsd.nr_e2
+    if getattr(original, "_qc_launcher_patched", False):
+        return
+
+    def nr_e2(eri, mo_coeff, orbs_slice, aosym="s1", mosym="s1", out=None, ao_loc=None):
+        return original(eri, mo_coeff, orbs_slice, aosym=aosym, mosym=mosym, out=None, ao_loc=ao_loc)
+
+    nr_e2._qc_launcher_patched = True
+    dfccsd.nr_e2 = nr_e2
+
+
 def run(spec: dict) -> dict:
     scratch = spec.get("scratch_dir")
     if scratch:
@@ -154,6 +171,7 @@ def run(spec: dict) -> dict:
     if backend == "byteqc":
         from byteqc import cucc, cump2
 
+        _patch_byteqc_df_eris()
         gpulim = spec.get("gpu_memory_gb")
         cpulim = spec.get("cpu_memory_gb")
         pool_kwargs = {
