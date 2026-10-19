@@ -48,21 +48,37 @@ def _gpu_name() -> str:
 
 
 _CUEST_DRIVERS: weakref.WeakSet = weakref.WeakSet()
+_INERT_BUNDLE_CLASS = None
 
 
 def _release_cuest_handles() -> None:
-    """Free cuEST plans while the bindings are still importable.
+    """Destroy cuEST handles of still-alive drivers while the bindings are importable.
 
-    gpu4pyscf's HandleBundle frees its handles in __del__, which at interpreter shutdown can run after the
-    cuest.bindings module has been torn down and then prints an AttributeError traceback.
+    gpu4pyscf's HandleBundle frees its plans and the cuEST handle in __del__, which at interpreter shutdown
+    can run after the cuest.bindings module has been torn down and then prints an AttributeError traceback.
+    After freeing everything here the bundle's destructor is turned into a no-op.
     """
+    global _INERT_BUNDLE_CLASS
     for driver in list(_CUEST_DRIVERS):
         handles = getattr(getattr(driver, "method", None), "handles", None)
-        if handles is not None:
-            try:
-                handles.reset()
-            except Exception:  # noqa: BLE001 - best effort at shutdown
-                pass
+        if handles is None or type(handles) is _INERT_BUNDLE_CLASS:
+            continue
+        try:
+            import cuest.bindings as ce
+            from gpu4pyscf.lib.cuest_wrapper import HandleBundle
+
+            if _INERT_BUNDLE_CLASS is None:
+
+                class InertHandleBundle(HandleBundle):
+                    def __del__(self):
+                        pass
+
+                _INERT_BUNDLE_CLASS = InertHandleBundle
+            handles.reset()
+            ce.cuestDestroy(handle=handles.cuest_handle)
+            handles.__class__ = _INERT_BUNDLE_CLASS
+        except Exception:  # noqa: BLE001 - best effort at shutdown
+            pass
 
 
 atexit.register(_release_cuest_handles)
