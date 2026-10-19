@@ -13,6 +13,7 @@ from ase.build import molecule
 MARKER_PACKAGES = {
     "pyscf": "pyscf",
     "gpu": "cupy",
+    "cuest": "cuest",
     "tblite": "tblite",
     "mace": "mace",
     "uma": "fairchem",

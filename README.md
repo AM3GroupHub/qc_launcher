@@ -75,6 +75,51 @@ below), `forces: true` (print forces after the single point), and the task block
 | `numerical_hessian`, `finite_diff_step` | `false`, `5e-3` Å | central differences of analytic gradients instead of the analytic Hessian |
 | `verbosity`, `max_memory` (GB), `threads` | `2`, none, `OMP_NUM_THREADS` | |
 
+**GPU acceleration with NVIDIA cuEST** (pyscf driver, `accelerator: cuest`)
+
+[cuEST](https://docs.nvidia.com/cuda/cuest) is NVIDIA's CUDA-X library for Gaussian-basis electronic structure
+(beta, proprietary EULA). gpu4pyscf ships the integration (`gpu4pyscf.lib.cuest_wrapper`, gpu4pyscf >= 1.7); the
+driver applies it on top of the density-fitted GPU method. Install the bindings matching your CUDA flavour:
+`pip install -e .[cuest-cu13]` (CUDA 13; needed for Blackwell such as the GB10 and for cuEST's JIT path) or
+`pip install -e .[cuest-cu12]` (CUDA 12, e.g. VANDA's A40 nodes with `module load CUDA/12.8.0`); cupy, gpu4pyscf
+and cuEST must all be the same CUDA flavour, and `libnvrtc` / `libnvJitLink` must be discoverable by the loader.
+cuEST keeps a JIT cache in `~/.cuest_cache/`.
+
+```yaml
+driver:
+  name: pyscf
+  xc: PBE0
+  basis: def2-SVP
+  with_df: true            # required
+  with_gpu: true           # required
+  accelerator: cuest
+  cuest:                   # optional, defaults shown
+    math_mode: native_fp64 # exact FP64; "default" = NVIDIA emulated / mixed precision (faster on A40, GB10)
+    threshold_pq: 1.0e-14
+    density_fitting_cutoff: 1.0e-12
+    max_workspace_gb: 10
+    disable: []            # any of hcore, jk, xc, nlc, pcm stays on native gpu4pyscf
+    match_native_grids: false  # Stratmann partitioning, no radii adjustment, ISWIG PCM: for parity checks
+```
+
+What cuEST accelerates: core Hamiltonian (incl. ECP), density-fitted J/K (incl. range-separated hybrids),
+XC and VV10 quadrature, C-PCM/COSMO, and all their nuclear gradients, so single points, optimizations, IRC,
+NEB, GSM and MD. Limits enforced by the driver or the wrapper: density fitting and the GPU are required;
+only C-PCM / COSMO solvation (no IEF-PCM, SS(V)PE, SMD); no `retry_soscf`; no composite `3c` methods; a fixed
+functional list (HF, SVWN, BLYP, PBE, PBE0, B3LYP, B97, M06-L, M06, M06-2X, r2SCAN, B97M-V, wB97X, wB97X-V,
+wB97M-V, CAM-B3LYP, HSE06, LC-wPBE, LC-wPBEh); **no analytic Hessian**, so `freq` uses central differences of
+the cuEST gradients by default and `numerical_hessian: false` computes a native gpu4pyscf Hessian at the same
+geometry instead. Range-separated functionals agree with native gpu4pyscf only to ~1e-5 Eh (different DF
+treatment); everything else matches to ~1e-10 Eh with `match_native_grids: true`. cuEST gradients always
+include the grid-weight response, which native gpu4pyscf gradients omit by default; the difference is ~1e-4 eV/Å
+on water and shrinks with finer grids. The cuEST EULA does not allow
+publishing benchmark results without NVIDIA's permission, so this README gives none; `scripts/bench_accelerator.py`
+measures native vs cuEST timings on your own hardware.
+
+JoltQC (ByteDance-Seed) was evaluated as well and not integrated: the project is archived (June 2026), not on
+PyPI, pinned to gpu4pyscf 1.4/1.5 internals, and accelerates only direct-SCF RHF/RKS energies (no density
+fitting, gradients, Hessians, UKS or solvation), which none of the qc_launcher workflows benefit from.
+
 **tblite**
 
 | Key | Default | Notes |
@@ -206,7 +251,7 @@ the Head-Gordon enthalpy damping, which ORCA does not apply (≈0.1 kcal/mol for
 
 ```
 examples/
-  1-single_point/   1-basic, 2-dft-3c, 3-df, 4-pcm, 5-smd, 6-soscf (pyscf); 7-tblite, 8-xtb-solv, 9-anneal
+  1-single_point/   1-basic, 2-dft-3c, 3-df, 4-pcm, 5-smd, 6-soscf, 10-cuest (pyscf); 7-tblite, 8-xtb-solv, 9-anneal
   2-geometry/       1-optimization, 2-frequency, 3-constraints (pyscf)
   3-transition_state/   1-optts, 2-irc (tblite, Diels-Alder TS)
   4-nudged_elastic_band/   1-neb, 2-ci-neb, 3-autoneb (UMA)
