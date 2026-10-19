@@ -30,7 +30,7 @@ qc_launch <subcommand> config.yaml
 
 | Subcommand | Input frames | Blocks read from the YAML |
 |---|---|---|
-| `qc` | one (last frame of `inputfile`) | optional `opt`, then a single point, optional `forces: true`, `freq`, `irc`, in that order |
+| `qc` | one (last frame of `inputfile`) | optional `opt`, then a single point, optional `forces: true`, `freq`, `refine`, `irc`, in that order |
 | `md` | one | `md` |
 | `neb` | two (interpolated) or `num_images + 2` | `neb` |
 | `autoneb` | exactly two | `autoneb` |
@@ -165,6 +165,14 @@ Hessians come from MACE's analytic `get_hessian`.
 (Å, pyscf symmetry detection tolerance), `qrrho` (true), `alpha` (4), `omega0` (100 cm⁻¹), `Bav` (1e-44 kg m²,
 or `auto`). Writes `<stem>_vib.txt` (PyVibMS format) and `<stem>_thermo.json`. See *Thermochemistry* below.
 
+**refine** (MP2 / CCSD / CCSD(T) single point on the final geometry, run in a separate interpreter):
+`backend` (`pyscf` | `byteqc`), `python` (interpreter of the backend environment; default: the current one),
+`pythonpath` (prepended for the runner, e.g. the parent directory of a ByteQC clone), `method` (`ccsd(t)` |
+`ccsd` | `mp2`), `basis` (cc-pVTZ), `auxbasis`, `ecp`, `frozen_core` (true, or a number of frozen orbitals),
+`conv_tol` (1e-8, CC amplitudes), `max_cycle` (100), `scf` (`{conv_tol: 1e-10, max_cycle: 100, density_fit:
+true, auxbasis}`), `ngpu` (1), `gpu_memory_gb` / `cpu_memory_gb` (ByteQC CCSD buffers), `scratch_dir`,
+`max_memory_mb`, `verbose` (3), `timeout_s`, `outputfile`. Closed-shell systems only. See *Energy refinement*.
+
 **irc** (Sella): `trajectory`, `outputfile`, `ninner_iter` (10), `dx` (0.1 Å), `eta` (1e-4), `keep_going`
 (false), `diag_every_n`, `fmax`, `max_steps` (10), `direction` (`forward` | `reverse` | `both`).
 
@@ -225,6 +233,7 @@ Similar settings use the same name everywhere; the older spellings keep working 
 |---|---|
 | opt | `<stem>_opt.traj`, `<stem>_opt.xyz` |
 | freq | `<stem>_vib.txt`, `<stem>_thermo.json`, optional `<stem>_hess.txt` (eV/Å², ASE layout) |
+| refine | `<stem>_refine.json`, `<stem>_refine.log`, `<stem>_refine_input.json` / `<stem>_refine_raw.json` (runner exchange files) |
 | irc | `<stem>_irc.traj`, `<stem>_irc.xyz` (reactant → TS → product) |
 | md | `<stem>_md.traj`, `<stem>_min.traj`, log file |
 | neb / autoneb | `<stem>_neb.xyz`, `<stem>_ts.xyz`, `<stem>_neb.traj` |
@@ -248,6 +257,51 @@ fed with the same frequencies: every RRHO term, the qRRHO entropy with `Bav: aut
 energy against GoodVibes agree to better than 3e-7 Eh. The only systematic difference to ORCA's Gibbs energy is
 the Head-Gordon enthalpy damping, which ORCA does not apply (≈0.1 kcal/mol for a water dimer).
 
+## Energy refinement
+
+`refine` adds a correlated single-point energy on the geometry the driver produced, so a cheap driver (xTB, a
+MLIP, DFT) supplies the structure and the thermal corrections and a high-level method supplies the electronic
+energy. The calculation is RHF followed by DF-MP2, CCSD or CCSD(T) and runs out of process through
+`src/qc_launcher/backends/refine_runner.py`, a self-contained script executed by the interpreter given as
+`python`. Two backends share the runner:
+
+- `pyscf`: CPU pyscf (`pyscf.mp.dfmp2_native`, `pyscf.cc`); works in the qc_launcher environment itself.
+- `byteqc`: [ByteQC](https://github.com/bytedance/byteqc) (GPU DF-CCSD, CCSD(T) and DF-MP2; `cucc`,
+  `cump2`). ByteQC pins `pyscf == 2.5.0`, which is older than what qc_launcher needs, so it lives in its own
+  environment: `python` points at that environment's interpreter and `pythonpath` at the parent directory of
+  the ByteQC clone (ByteQC is source-only). The runner's own imports are limited to the standard library,
+  numpy and pyscf. ByteQC's DF-MP2 has no frozen-core option (a warning is printed); CCSD/CCSD(T) use `frozen_core`.
+
+When `freq` ran in the same `qc` call (or `<stem>_thermo.json` exists next to the input), the thermochemical
+totals are recombined with the refined energy:
+
+```
+X_refined = X − E0 + E_refined        for X in E_0K, H_tot, G_tot, H_tot_qrrho, G_tot_qrrho
+```
+
+where `E0` is the driver's electronic energy, i.e. the driver's ZPE and thermal corrections are kept and only
+the electronic energy is replaced. `<stem>_refine.json` holds `e_hf`, the correlation pieces (`e_corr_mp2`,
+`e_corr_ccsd`, `e_t`), `e_total` (Eh), timings, the backend versions and the `composite` block.
+
+A ByteQC environment that worked on an A40 (CUDA 12.8, x86_64):
+
+```bash
+conda create -n byteqc -c conda-forge python=3.11 "numpy<2" scipy h5py cmake make "cutensor>=2.1" cuda-version=12.8
+conda activate byteqc
+pip install pyscf==2.5.0 "cupy-cuda12x>=14" "nvmath-python[cu12]"
+git clone https://github.com/bytedance/byteqc.git ~/repo/byteqc && cd ~/repo/byteqc
+# ByteQC's CMake wants $CUTENSOR_ROOT/lib/12/libcutensor.so and $CUTENSOR_ROOT/include/cutensor.h
+mkdir -p $CONDA_PREFIX/cutensor_root/lib && ln -sfn $CONDA_PREFIX/lib $CONDA_PREFIX/cutensor_root/lib/12 \
+  && ln -sfn $CONDA_PREFIX/include $CONDA_PREFIX/cutensor_root/include
+export CUTENSOR_ROOT=$CONDA_PREFIX/cutensor_root CUDA_ARCHITECTURES=86   # sm_86 = A40
+for sub in cuobc cupbc; do cmake $sub/lib -B $sub/lib/build && make -j16 -C $sub/lib/build; done
+echo ~/repo > $CONDA_PREFIX/lib/python3.11/site-packages/byteqc.pth   # or pass refine.pythonpath instead
+python -c "import byteqc.cucc, byteqc.cump2"
+```
+
+Then in the YAML: `refine: {backend: byteqc, python: <env>/bin/python, method: ccsd(t), basis: cc-pVTZ}`.
+The `byteqc`-marked tests run when `QC_LAUNCHER_BYTEQC_PYTHON` names that interpreter.
+
 ## Examples
 
 ```
@@ -259,6 +313,7 @@ examples/
   5-growing_string/ 1-gsm (tblite), 2-pyscf
   6-dynamics/       1-nve, 2-langevin, 3-nvt, 4-npt (tblite)
   7-pysisyphus/     1-optts, 2-irc (tblite through the bridge)
+  8-refinement/     1-xtb_opt_ccsd_t (tblite opt + freq, ByteQC CCSD(T)), 2-pyscf_backend (CPU pyscf)
 ```
 
 Run each from its directory with the command given at the bottom of the YAML (`qc_launch qc`, `md`, `neb`,

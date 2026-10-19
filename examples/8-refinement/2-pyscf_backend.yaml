@@ -1,0 +1,16 @@
+# qc_launch qc 2-pyscf_backend.yaml
+# Same workflow with the CPU pyscf backend (no extra environment): GFN2-xTB opt + freq, then CCSD(T)/cc-pVDZ.
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+
+opt: true
+freq: true
+
+refine:
+  backend: pyscf
+  method: ccsd(t)
+  basis: cc-pVDZ
+  frozen_core: true

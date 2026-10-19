@@ -1,0 +1,30 @@
+# qc_launch qc 1-xtb_opt_ccsd_t.yaml
+# GFN2-xTB geometry and thermal corrections, then DF-CCSD(T)/cc-pVTZ with ByteQC on the GPU.
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+
+opt: true
+freq: true
+
+refine:
+  backend: byteqc
+  python: /scratch/e1554743/conda/envs/byteqc/bin/python  # interpreter of the ByteQC environment
+  pythonpath: /home/svu/e1554743/repo                     # parent directory of the ByteQC clone (not needed with a .pth file)
+  method: ccsd(t)  # mp2 | ccsd | ccsd(t)
+  basis: cc-pVTZ
+  auxbasis: null  # pyscf default (MP2-fit for cc-pVTZ)
+  frozen_core: true
+  scf:
+    conv_tol: 1.0e-10
+    max_cycle: 100
+    density_fit: true
+  conv_tol: 1.0e-8  # CC amplitude convergence
+  ngpu: 1
+  gpu_memory_gb: null  # ByteQC CCSD buffer limits; null = ByteQC's defaults
+  cpu_memory_gb: null
+  scratch_dir: null  # ByteQC / pyscf scratch files (default: the pyscf temp dir)
+  timeout_s: null
+  outputfile: water_refine.json
