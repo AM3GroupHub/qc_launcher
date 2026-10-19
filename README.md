@@ -317,6 +317,12 @@ pip install --no-binary cupy "cupy>=14"
 # then build ByteQC as above with CUDA_ARCHITECTURES=121 and -DCMAKE_CUDA_COMPILER=$CONDA_PREFIX/bin/nvcc
 ```
 
+On such a unified-memory machine set `gpu_memory_gb` and `cpu_memory_gb` (for example 40 and 30 on a 128 GB
+GB10): ByteQC sizes its CCSD buffers from the free GPU memory and the free host memory separately, which is the
+same memory there, and an unlimited run gets killed by the OOM killer. The runner also works around a ByteQC
+DF-CCSD bug with frozen orbitals (its integral transformation reuses a buffer sized for the active orbitals; the
+second DF block of any molecule with more than 240 auxiliary functions fails with `buf is not enough`).
+
 Then in the YAML: `refine: {backend: byteqc, python: <env>/bin/python, method: ccsd(t), basis: cc-pVTZ}`.
 The `byteqc`-marked tests run when `QC_LAUNCHER_BYTEQC_PYTHON` names that interpreter.
 
