@@ -337,9 +337,10 @@ class PySCFDriver(BaseDriver):
             # Native DF resolves this lazily, but cuEST requires an explicit basis before its first SCF.
             mf.with_df.auxbasis = make_auxbasis(mf.mol)
         mf = apply_cuest_wrapper(mf)
-        # The wrapper defines this mutable cache on HandleBundle's class. Keep it per handle so one
-        # driver's exchange settings cannot mark another driver's integral plan as reusable.
-        mf.handles.dfintplan_parameter_cache = dict(mf.handles.dfintplan_parameter_cache)
+        # gpu4pyscf master keeps this mutable cache on HandleBundle's class (absent in <= 1.8.1). Keep it
+        # per handle so one driver's exchange settings cannot mark another driver's integral plan as reusable.
+        if hasattr(mf.handles, "dfintplan_parameter_cache"):
+            mf.handles.dfintplan_parameter_cache = dict(mf.handles.dfintplan_parameter_cache)
         # The wrapper rebuilds its helpers on changes to the disable flags and thresholds.
         # Set the workspace first so those rebuilds propagate it to the helpers as well.
         mf.maximum_workspace_bytes = int(float(options.get("max_workspace_gb", 10)) * 1e9)
