@@ -33,6 +33,9 @@ def main(argv=None) -> int:
     parser.add_argument("--all-electron", action="store_true", help="no frozen core")
     parser.add_argument("--charge", type=int, default=0)
     parser.add_argument("--ngpu", type=int, default=1)
+    parser.add_argument(
+        "--scf-gpu", action="store_true", help="run the reference SCF with ByteQC cuobc (byteqc backend)"
+    )
     args = parser.parse_args(argv)
 
     atoms = ase.io.read(args.xyz)
@@ -50,6 +53,7 @@ def main(argv=None) -> int:
                 "basis": args.basis,
                 "frozen_core": frozen,
                 "ngpu": args.ngpu,
+                "scf": {"gpu": args.scf_gpu and backend == "byteqc"},
                 "verbose": 3,
             }
             t0 = time.time()

@@ -1,8 +1,8 @@
 import argparse
 import math
 
-import numpy as np
 import ase.io
+import numpy as np
 from ase.units import Bohr
 from pyscf import gto
 from pyscf.dft import gen_grid
@@ -28,7 +28,7 @@ def main():
     radii_table = 1.2 * pcm.modified_Bondi
     ng = gen_grid.LEBEDEV_ORDER[29]
     surface = pcm.gen_surface(mol, rad=radii_table, ng=ng)
-    
+
     # calculate cavity radius
     coords: np.ndarray = surface["grid_coords"]
     normals: np.ndarray = surface["norm_vec"]
@@ -41,7 +41,7 @@ def main():
     if volume_bohr3 < 0:
         raise ValueError("Calculated volume is negative, check the input molecule and PCM parameters.")
     area_bohr2 = np.sum(area).item()
-    radius_bohr = (3 * volume_bohr3 / (4 * math.pi)) ** (1/3)
+    radius_bohr = (3 * volume_bohr3 / (4 * math.pi)) ** (1 / 3)
     radius_from_area_bohr = math.sqrt(area_bohr2 / (4.0 * math.pi))
 
     print(f"Cavity radius (from volume): {radius_bohr:.4f} Bohr")

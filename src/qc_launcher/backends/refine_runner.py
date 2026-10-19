@@ -10,7 +10,7 @@ library, numpy, pyscf and, for ``backend == "byteqc"``, ByteQC. It never imports
 
 Input JSON keys: symbols, positions (Angstrom), charge, multiplicity, basis, auxbasis, ecp, backend
 ("pyscf" | "byteqc"), method ("mp2" | "ccsd" | "ccsd(t)"), frozen_core (bool | int), conv_tol,
-max_cycle, scf ({conv_tol, max_cycle, density_fit}), ngpu, gpu_memory_gb, cpu_memory_gb, scratch_dir,
+max_cycle, scf ({conv_tol, max_cycle, density_fit, gpu, auxbasis}), ngpu, gpu_memory_gb, cpu_memory_gb, scratch_dir,
 verbose, max_memory_mb.
 Output JSON keys: e_hf, e_corr_mp2 / e_corr_ccsd / e_t (as applicable), e_corr, e_total (Eh), converged
 flags, nao, nocc, n_frozen, timings (s), versions, warnings, and on failure error + traceback.
@@ -108,18 +108,37 @@ def run(spec: dict) -> dict:
     out["nocc"] = int(mol.nelectron // 2)
 
     scf_opts = spec.get("scf") or {}
+    scf_density_fit = bool(scf_opts.get("density_fit", True))
+    gpu_scf = bool(scf_opts.get("gpu", False))
+    if gpu_scf and backend != "byteqc":
+        out["warnings"].append("scf.gpu applies to the byteqc backend only; the SCF ran on the CPU.")
+        gpu_scf = False
+    if backend == "byteqc":
+        from byteqc.lib import Mg
+
+        Mg.set_gpus(int(spec.get("ngpu", 1)))
     t0 = time.time()
-    mf = scf.RHF(mol)
-    if scf_opts.get("density_fit", True):
-        mf = mf.density_fit(auxbasis=scf_opts.get("auxbasis"))
+    if gpu_scf:
+        # ByteQC's cuobc RHF runs the SCF with exact integrals on the GPU (its own usage pattern); a DF wrapper
+        # is added afterwards, without re-running the SCF, so that the correlated step uses DF integrals.
+        from byteqc.cuobc import scf as cuscf
+
+        mf = cuscf.RHF(mol)
+    else:
+        mf = scf.RHF(mol)
+        if scf_density_fit:
+            mf = mf.density_fit(auxbasis=scf_opts.get("auxbasis"))
     mf.conv_tol = float(scf_opts.get("conv_tol", 1e-10))
     mf.max_cycle = int(scf_opts.get("max_cycle", 100))
     e_hf = float(mf.kernel())
     out["timings"]["scf_s"] = time.time() - t0
     out["e_hf"] = e_hf
     out["scf_converged"] = bool(mf.converged)
+    out["scf_gpu"] = gpu_scf
     if not mf.converged:
         raise RuntimeError("The reference RHF did not converge.")
+    if gpu_scf and scf_density_fit:
+        mf = mf.density_fit(auxbasis=scf_opts.get("auxbasis"))
 
     frozen_setting = spec.get("frozen_core", True)
     if isinstance(frozen_setting, bool):
@@ -134,9 +153,7 @@ def run(spec: dict) -> dict:
 
     if backend == "byteqc":
         from byteqc import cucc, cump2
-        from byteqc.lib import Mg
 
-        Mg.set_gpus(int(spec.get("ngpu", 1)))
         gpulim = spec.get("gpu_memory_gb")
         cpulim = spec.get("cpu_memory_gb")
         pool_kwargs = {
