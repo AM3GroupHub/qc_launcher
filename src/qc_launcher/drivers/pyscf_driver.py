@@ -152,13 +152,13 @@ class PySCFDriver(BaseDriver):
         super().__init__(atoms=atoms, config=config, **kwargs)
         xc = str(self.config.get("xc", "B3LYP"))
         self.is_3c = xc.lower().endswith("3c")
-        self._3c = _parse_3c(xc) if self.is_3c else None
         self.retry_soscf = bool(self.config.get("retry_soscf", False))
         self.accelerator = str(self.config.get("accelerator", "none")).lower()
         if self.accelerator not in ACCELERATORS:
             raise ValueError(f"Unknown accelerator '{self.accelerator}'. Use one of {ACCELERATORS}.")
         if self.accelerator == "cuest":
-            self._check_cuest_config(self.config)
+            self._check_cuest_config(self.config)  # before anything imports gpu4pyscf or cuEST
+        self._3c = _parse_3c(xc) if self.is_3c else None
         self._dm_cache = None
         self._native_method = None  # plain gpu4pyscf method used for analytic Hessians under cuEST
         self.method = None if atoms is None else self.build_method()
