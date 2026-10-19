@@ -302,6 +302,21 @@ echo ~/repo > $CONDA_PREFIX/lib/python3.11/site-packages/byteqc.pth   # or pass 
 python -c "import byteqc.cucc, byteqc.cump2"
 ```
 
+On an aarch64 host with a CUDA 13 driver (DGX Spark / GB10, sm_121) the same recipe works with a conda CUDA 12.9
+toolchain, except that the aarch64 CuPy wheel lacks the cuTENSOR bindings ByteQC imports, so CuPy is built
+from source (about 15 minutes):
+
+```bash
+conda create -n byteqc-gb10 -c conda-forge python=3.11 scipy h5py cmake make "cutensor>=2.1" cuda-version=12.9 \
+  cuda-nvcc=12.9 cuda-cudart-dev=12.9 cuda-nvrtc-dev=12.9 cuda-profiler-api=12.9 libcublas-dev libcusolver-dev \
+  libcusparse-dev libcurand-dev libcufft-dev "gcc_linux-aarch64=13" "gxx_linux-aarch64=13"
+conda activate byteqc-gb10 && pip install pyscf==2.5.0 "nvmath-python[cu12]"
+export CUDA_PATH=$CONDA_PREFIX CUTENSOR_PATH=$CONDA_PREFIX CUPY_NUM_BUILD_JOBS=16 \
+  CUPY_NVCC_GENERATE_CODE="arch=compute_121,code=sm_121" CPATH=$CONDA_PREFIX/targets/sbsa-linux/include:$CONDA_PREFIX/include
+pip install --no-binary cupy "cupy>=14"
+# then build ByteQC as above with CUDA_ARCHITECTURES=121 and -DCMAKE_CUDA_COMPILER=$CONDA_PREFIX/bin/nvcc
+```
+
 Then in the YAML: `refine: {backend: byteqc, python: <env>/bin/python, method: ccsd(t), basis: cc-pVTZ}`.
 The `byteqc`-marked tests run when `QC_LAUNCHER_BYTEQC_PYTHON` names that interpreter.
 
