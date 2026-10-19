@@ -44,6 +44,12 @@ mace = [
 fairchem = [
     "fairchem-core",
 ]
+cuest-cu13 = [
+    "nvidia-cuest-cu13==0.2.*",
+]
+cuest-cu12 = [
+    "nvidia-cuest-cu12==0.2.*",
+]
 dev = [
     "pytest",
     "ruff",
@@ -70,6 +76,7 @@ testpaths = ["tests"]
 markers = [
     "pyscf: needs pyscf",
     "gpu: needs cupy/gpu4pyscf and a GPU",
+    "cuest: needs nvidia-cuest and a GPU",
     "tblite: needs tblite",
     "mace: needs mace-torch and a MACE model file",
     "uma: needs fairchem-core and a UMA model file",

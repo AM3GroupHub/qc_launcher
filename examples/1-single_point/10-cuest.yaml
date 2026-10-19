@@ -1,0 +1,24 @@
+inputfile: water.xyz
+
+driver:
+  name: pyscf
+  xc: PBE0                # cuEST functionals: HF, SVWN, BLYP, PBE, PBE0, B3LYP, B97, M06-L, M06, M06-2X, r2SCAN,
+                          # B97M-V, wB97X, wB97X-V, wB97M-V, CAM-B3LYP, HSE06, LC-wPBE, LC-wPBEh
+  basis: def2-SVP
+  with_df: true           # required by cuEST
+  auxbasis: def2-universal-jkfit
+  with_gpu: true          # required by cuEST
+  accelerator: cuest      # NVIDIA cuEST through gpu4pyscf (pip install -e .[cuest-cu13] or .[cuest-cu12])
+  cuest:
+    math_mode: native_fp64   # exact FP64; "default" uses NVIDIA's emulated / mixed precision (faster on A40 and GB10)
+    threshold_pq: 1.0e-14
+    density_fitting_cutoff: 1.0e-12
+    max_workspace_gb: 10
+    disable: []              # any of hcore, jk, xc, nlc, pcm to keep that part on native gpu4pyscf
+    match_native_grids: false
+
+# cuEST has no analytic Hessian: `freq` uses central differences of the cuEST gradients by default;
+# set `numerical_hessian: false` to compute a native gpu4pyscf Hessian at the same geometry instead.
+
+# command:
+# qc_launch qc 10-cuest.yaml
