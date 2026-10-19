@@ -8,8 +8,10 @@ gradients by default (``numerical_hessian: false`` switches to a native gpu4pysc
 
 from __future__ import annotations
 
+import atexit
 import os
 import warnings
+import weakref
 from types import MethodType
 
 import numpy as np
@@ -43,6 +45,27 @@ def _gpu_name() -> str:
         return cupy.cuda.runtime.getDeviceProperties(cupy.cuda.Device().id)["name"].decode()
     except Exception:  # noqa: BLE001 - purely informational
         return "unknown GPU"
+
+
+_CUEST_DRIVERS: weakref.WeakSet = weakref.WeakSet()
+
+
+def _release_cuest_handles() -> None:
+    """Free cuEST plans while the bindings are still importable.
+
+    gpu4pyscf's HandleBundle frees its handles in __del__, which at interpreter shutdown can run after the
+    cuest.bindings module has been torn down and then prints an AttributeError traceback.
+    """
+    for driver in list(_CUEST_DRIVERS):
+        handles = getattr(getattr(driver, "method", None), "handles", None)
+        if handles is not None:
+            try:
+                handles.reset()
+            except Exception:  # noqa: BLE001 - best effort at shutdown
+                pass
+
+
+atexit.register(_release_cuest_handles)
 
 
 def _match_cuest_grids(mf) -> None:
@@ -289,6 +312,7 @@ class PySCFDriver(BaseDriver):
         mf.density_fitting_cutoff = float(options.get("density_fitting_cutoff", 1e-12))
         mf.threshold_pq = float(options.get("threshold_pq", 1e-14))
         mf.math_mode = str(options.get("math_mode", "native_fp64")).lower().replace("-", "_")
+        _CUEST_DRIVERS.add(self)
         self.log(
             f"cuEST accelerator on {_gpu_name()}: math_mode={mf.math_mode}, threshold_pq={mf.threshold_pq:g}, "
             f"workspace={mf.maximum_workspace_bytes / 1e9:g} GB, disabled={list(options.get('disable') or [])}"
