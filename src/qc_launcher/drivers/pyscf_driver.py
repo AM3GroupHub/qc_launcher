@@ -100,6 +100,16 @@ def _match_cuest_grids(mf) -> None:
         mf.with_solvent.surface_discretization_method = "ISWIG"
 
 
+def _native_hcore_gradient(grad, dm) -> np.ndarray:
+    """Use gpu4pyscf's current core-gradient API when the cuEST fallback uses removed imports."""
+    import cupy
+
+    if dm.ndim == 3:
+        dm = dm.sum(axis=0)
+    # _hcore_energy includes the overlap response; a zero energy-weighted density leaves just hcore.
+    return grad._hcore_energy(dm, cupy.zeros_like(dm))
+
+
 def _parse_3c(xc: str) -> tuple[str, str, str, str | None, str, str]:
     """Split a composite '3c' functional (e.g. B97-3c) into (xc, nlc, basis, ecp, xc_disp, xc_gcp)."""
     from gpu4pyscf.drivers.dft_3c_driver import parse_3c
@@ -285,7 +295,9 @@ class PySCFDriver(BaseDriver):
         if config.get("retry_soscf", False):
             raise ValueError("accelerator 'cuest' does not support retry_soscf (cuEST has no second-order SCF).")
         solvation = config.get("solvation")
-        if solvation is None and config.get("with_solvent"):
+        if config.get("with_solvent") is False:
+            solvation = None
+        elif solvation is None and config.get("with_solvent"):
             solvation = {"model": "ief-pcm"}
         if solvation:
             model = str(solvation.get("model", solvation.get("method", "ief-pcm"))).lower()
@@ -319,9 +331,17 @@ class PySCFDriver(BaseDriver):
         if options.get("match_native_grids", False):
             _match_cuest_grids(mf)
 
+        if mf.with_df.auxbasis is None:
+            from pyscf.df.addons import make_auxbasis
+
+            # Native DF resolves this lazily, but cuEST requires an explicit basis before its first SCF.
+            mf.with_df.auxbasis = make_auxbasis(mf.mol)
         mf = apply_cuest_wrapper(mf)
-        # the wrapper rebuilds its helper objects when one of its "unsafe" keys changes; set the plain
-        # attributes first and threshold_pq last so that one rebuild picks everything up
+        # The wrapper defines this mutable cache on HandleBundle's class. Keep it per handle so one
+        # driver's exchange settings cannot mark another driver's integral plan as reusable.
+        mf.handles.dfintplan_parameter_cache = dict(mf.handles.dfintplan_parameter_cache)
+        # The wrapper rebuilds its helpers on changes to the disable flags and thresholds.
+        # Set the workspace first so those rebuilds propagate it to the helpers as well.
         mf.maximum_workspace_bytes = int(float(options.get("max_workspace_gb", 10)) * 1e9)
         for part in options.get("disable") or []:
             setattr(mf, f"turn_on_cuest_{str(part).lower()}", False)
@@ -355,7 +375,7 @@ class PySCFDriver(BaseDriver):
         dm0 = self.method.make_rdm1()
 
         def gradient_at(coords):
-            self.method.reset(mol0.set_geom_(coords, unit="Bohr", inplace=False))
+            self._reset_method(mol0.set_geom_(coords, unit="Bohr", inplace=False))
             self.method.kernel(dm0=dm0)
             if not self.method.converged:
                 raise RuntimeError("SCF did not converge at a displaced geometry during the finite-difference Hessian.")
@@ -364,12 +384,14 @@ class PySCFDriver(BaseDriver):
         try:
             return _central_difference_hessian(mol0, gradient_at, displacement)
         finally:
-            self.method.reset(mol0.set_geom_(coords0, unit="Bohr", inplace=False))
+            self._reset_method(mol0.set_geom_(coords0, unit="Bohr", inplace=False))
             self._last_positions = None  # the SCF state belongs to a displaced geometry; rerun before reuse
 
     def _apply_solvent(self, mf, solvation: dict):
         solvation = rename_deprecated_keys(solvation, "driver.solvation")
         model = str(solvation.get("model", "ief-pcm"))
+        if model.lower() == "cpcm":
+            model = "C-PCM"
         if model.lower() in PCM_METHODS:
             mf = mf.PCM()
             mf.with_solvent.lebedev_order = 29
@@ -416,6 +438,9 @@ class PySCFDriver(BaseDriver):
     def build_gradient_method(self):
         # the cuEST wrapper overrides Gradients() to return its own gradient wrapper
         grad = self.method.Gradients() if self.accelerator == "cuest" else self.method.nuc_grad_method()
+        if self.accelerator == "cuest":
+            if not self.method.turn_on_cuest_hcore and hasattr(grad, "_hcore_energy"):
+                grad.get_hcore_grad = MethodType(_native_hcore_gradient, grad)
         if self.is_3c:
             from gpu4pyscf.drivers.dft_3c_driver import gen_disp_grad_fun
 
@@ -434,6 +459,19 @@ class PySCFDriver(BaseDriver):
         return hess
 
     # ------------------------------------------------------------------ SCF
+    def _reset_method(self, mol) -> None:
+        """Reset cuEST and the native objects retained for disabled accelerator components."""
+        if self.accelerator == "cuest":
+            # CuESTWrapper.reset deliberately skips the native reset chain. Its backup objects otherwise
+            # retain grids, DF integrals and PCM surfaces from the previous geometry.
+            self.method.with_df.reset(mol)
+            for grids in (self.method.grids, self.method.nlcgrids):
+                grids._backup_grids.reset(mol)
+            self.method._numint._backup_numint.reset()
+            if getattr(self.method, "with_solvent", None) is not None:
+                self.method.with_solvent._backup_with_solvent.reset(mol)
+        self.method.reset(mol)
+
     def clear_cache(self) -> None:
         self._dm_cache = None
         self._native_method = None
@@ -452,7 +490,7 @@ class PySCFDriver(BaseDriver):
             return self.method.e_tot
 
         mol = self.method.mol.set_geom_(self.atoms.get_positions(), unit="Angstrom", inplace=False)
-        self.method.reset(mol)
+        self._reset_method(mol)
         energy = self.method.kernel(dm0=self._dm_cache if use_cache else None)
         converged = self.method.converged
         if not converged and self.retry_soscf:

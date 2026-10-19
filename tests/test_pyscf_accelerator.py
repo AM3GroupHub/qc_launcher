@@ -42,3 +42,9 @@ def test_accelerator_none_is_default(water):
     )
     assert driver.accelerator == "none"
     assert driver.config.get("numerical_hessian") is None  # analytic Hessian stays the default without cuEST
+
+
+def test_disabled_solvation_is_not_validated():
+    # Legacy configs can retain a solvent block while explicitly switching solvation off.
+    config = {**BASE, "with_solvent": False, "solvation": {"model": "IEF-PCM", "solvent": "water"}}
+    assert make(config, None).accelerator == "cuest"

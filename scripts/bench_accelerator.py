@@ -56,13 +56,20 @@ def run_mode(config, atoms, mode, with_grad):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("config")
-    parser.add_argument("--modes", nargs="+", default=["none", "cuest:native_fp64", "cuest:default"])
+    parser.add_argument(
+        "--modes",
+        nargs="+",
+        choices=["none", "cuest:native_fp64", "cuest:default"],
+        default=["none", "cuest:native_fp64", "cuest:default"],
+        help="modes to measure; the native reference ('none') is always included first",
+    )
     parser.add_argument("--no-grad", action="store_true")
     args = parser.parse_args()
 
     config = load_yaml_config(args.config)
     atoms, _ = load_structures(config)
-    rows = [run_mode(config, atoms, mode, not args.no_grad) for mode in args.modes]
+    modes = ["none", *(mode for mode in args.modes if mode != "none")]
+    rows = [run_mode(config, atoms, mode, not args.no_grad) for mode in modes]
     reference = rows[0]
     print(f"\n{len(atoms)} atoms, {config['driver'].get('xc', 'B3LYP')}/{config['driver'].get('basis', 'def2-SVP')}")
     print(

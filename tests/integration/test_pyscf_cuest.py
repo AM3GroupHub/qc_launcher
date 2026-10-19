@@ -74,13 +74,14 @@ def test_energy_and_forces_match_native(native_reference):
 
 
 def test_default_math_mode_and_disable(native_reference):
-    water, e_ref, _, _, _ = native_reference
+    water, e_ref, f_ref, _, _ = native_reference
     emulated = make(water.copy(), CUEST, cuest={"match_native_grids": True, "math_mode": "default"})
     assert emulated.method.math_mode == "default"
     assert emulated.compute_energy() == pytest.approx(e_ref, abs=1e-6 * Hartree)
     partial = make(water.copy(), CUEST, cuest={"match_native_grids": True, "disable": ["xc"]})
     assert partial.method.turn_on_cuest_xc is False
     assert partial.compute_energy() == pytest.approx(e_ref, abs=1e-6 * Hartree)
+    np.testing.assert_allclose(partial.compute_forces(), f_ref, atol=1e-5)
 
 
 def test_hessians(native_reference):
@@ -95,6 +96,14 @@ def test_hessians(native_reference):
     np.testing.assert_allclose(analytic, h_analytic, atol=1e-4)
 
 
+@pytest.mark.parametrize("restricted", [True, False])
+def test_native_hcore_forces_match_native(native_reference, restricted):
+    water, e_ref, f_ref, _, _ = native_reference
+    driver = make(water.copy(), CUEST, restricted=restricted, cuest={"disable": ["hcore"]})
+    assert driver.compute_energy() == pytest.approx(e_ref, abs=1e-6 * Hartree)
+    np.testing.assert_allclose(driver.compute_forces(), f_ref, atol=1e-5)
+
+
 def test_scf_follows_in_place_moves(native_reference):
     water, e_ref, _, _, _ = native_reference
     atoms = water.copy()
@@ -105,6 +114,33 @@ def test_scf_follows_in_place_moves(native_reference):
     assert abs(e2 - e1) > 1e-3
     atoms.positions[0, 0] -= 0.2
     assert driver.compute_energy() == pytest.approx(e_ref, abs=1e-6 * Hartree)
+
+
+@pytest.mark.parametrize("part", ["hcore", "jk", "xc", "nlc", "pcm"])
+def test_native_parts_follow_geometry_changes(water, part):
+    options = {"disable": [part], "match_native_grids": True}
+    config = {**CUEST, "cuest": options}
+    if part == "nlc":
+        config["xc"] = "wB97X-V"
+    if part == "pcm":
+        config["solvation"] = {"model": "cpcm", "epsilon": 78.3553}
+    driver = make(water, config)
+    driver.compute_energy()
+    driver.compute_forces()
+    water.positions[0, 0] += 0.2
+    fresh = make(water.copy(), config)
+    assert driver.compute_energy() == pytest.approx(fresh.compute_energy(), abs=1e-7 * Hartree)
+    np.testing.assert_allclose(driver.compute_forces(), fresh.compute_forces(), atol=1e-5)
+
+
+def test_automatic_auxbasis_for_element_specific_basis(water):
+    config = {**CUEST, "basis": {"H": "def2-SVP", "O": "def2-SVP"}, "auxbasis": None}
+    driver = make(water, config)
+    reference = make(water.copy(), {**config, "accelerator": "none"})
+    from qc_launcher.drivers.pyscf_driver import _match_cuest_grids
+
+    _match_cuest_grids(reference.method)
+    assert driver.compute_energy() == pytest.approx(reference.compute_energy(), abs=1e-6 * Hartree)
 
 
 def test_cpcm_and_uks_parity(water):
