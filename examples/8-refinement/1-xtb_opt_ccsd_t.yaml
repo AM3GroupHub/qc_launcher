@@ -21,6 +21,7 @@ refine:
     conv_tol: 1.0e-10
     max_cycle: 100
     density_fit: true
+    gpu: false  # true: reference SCF with ByteQC's cuobc on the GPU (exact integrals)
   conv_tol: 1.0e-8  # CC amplitude convergence
   ngpu: 1
   gpu_memory_gb: null  # ByteQC CCSD buffer limits; null = ByteQC's defaults

@@ -61,7 +61,16 @@ def main(argv=None) -> int:
                 out = run_refine(_Driver(atoms), config, f"{stem}_{method.replace('(', '').replace(')', '')}_{backend}")
                 results[backend] = out
                 rows.append(
-                    (method, backend, out["e_hf"], out["e_corr"], out["e_total"], out["timings"], time.time() - t0, "")
+                    (
+                        method,
+                        backend,
+                        out["e_hf"],
+                        out["e_corr"],
+                        out["e_total"],
+                        out["timings"],
+                        time.time() - t0,
+                        "gpu scf" if out.get("scf_gpu") else "",
+                    )
                 )
             except Exception as exc:  # noqa: BLE001 - keep benchmarking the other cases
                 rows.append(

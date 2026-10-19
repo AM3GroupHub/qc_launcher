@@ -170,7 +170,7 @@ or `auto`). Writes `<stem>_vib.txt` (PyVibMS format) and `<stem>_thermo.json`. S
 `pythonpath` (prepended for the runner, e.g. the parent directory of a ByteQC clone), `method` (`ccsd(t)` |
 `ccsd` | `mp2`), `basis` (cc-pVTZ), `auxbasis`, `ecp`, `frozen_core` (true, or a number of frozen orbitals),
 `conv_tol` (1e-8, CC amplitudes), `max_cycle` (100), `scf` (`{conv_tol: 1e-10, max_cycle: 100, density_fit:
-true, auxbasis}`), `ngpu` (1), `gpu_memory_gb` / `cpu_memory_gb` (ByteQC CCSD buffers), `scratch_dir`,
+true, auxbasis, gpu: false}`), `ngpu` (1), `gpu_memory_gb` / `cpu_memory_gb` (ByteQC CCSD buffers), `scratch_dir`,
 `max_memory_mb`, `verbose` (3), `timeout_s`, `outputfile`. Closed-shell systems only. See *Energy refinement*.
 
 **irc** (Sella): `trajectory`, `outputfile`, `ninner_iter` (10), `dx` (0.1 Å), `eta` (1e-4), `keep_going`
@@ -271,6 +271,9 @@ energy. The calculation is RHF followed by DF-MP2, CCSD or CCSD(T) and runs out 
   environment: `python` points at that environment's interpreter and `pythonpath` at the parent directory of
   the ByteQC clone (ByteQC is source-only). The runner's own imports are limited to the standard library,
   numpy and pyscf. ByteQC's DF-MP2 has no frozen-core option (a warning is printed); CCSD/CCSD(T) use `frozen_core`.
+  By default the reference RHF runs on the CPU with pyscf (density fitted when `scf.density_fit` is true).
+  `scf: {gpu: true}` runs it with ByteQC's `cuobc` RHF instead: exact integrals on the GPU, as in ByteQC's own
+  examples, with the DF wrapper added afterwards for the correlated step.
 
 When `freq` ran in the same `qc` call (or `<stem>_thermo.json` exists next to the input), the thermochemical
 totals are recombined with the refined energy:
