@@ -121,7 +121,7 @@ def test_native_parts_follow_geometry_changes(water, part):
     options = {"disable": [part], "match_native_grids": True}
     config = {**CUEST, "cuest": options}
     if part == "nlc":
-        config["xc"] = "wB97X-V"
+        config["xc"] = "B97M-V"  # VV10 without range separation: supported by gpu4pyscf 1.8.1's wrapper as well
     if part == "pcm":
         config["solvation"] = {"model": "cpcm", "epsilon": 78.3553}
     driver = make(water, config)

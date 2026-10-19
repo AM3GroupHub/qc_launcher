@@ -107,7 +107,8 @@ XC and VV10 quadrature, C-PCM/COSMO, and all their nuclear gradients, so single 
 NEB, GSM and MD. Limits enforced by the driver or the wrapper: density fitting and the GPU are required;
 only C-PCM / COSMO solvation (no IEF-PCM, SS(V)PE, SMD); no `retry_soscf`; no composite `3c` methods; a fixed
 functional list (HF, SVWN, BLYP, PBE, PBE0, B3LYP, B97, M06-L, M06, M06-2X, r2SCAN, B97M-V, wB97X, wB97X-V,
-wB97M-V, CAM-B3LYP, HSE06, LC-wPBE, LC-wPBEh); **no analytic Hessian**, so `freq` uses central differences of
+wB97M-V, CAM-B3LYP, HSE06, LC-wPBE, LC-wPBEh; the range-separated ones need gpu4pyscf newer than 1.8.1,
+the 1.8.1 wheel's wrapper stops at r2SCAN / B97M-V); **no analytic Hessian**, so `freq` uses central differences of
 the cuEST gradients by default and `numerical_hessian: false` computes a native gpu4pyscf Hessian at the same
 geometry instead. Range-separated functionals agree with native gpu4pyscf only to ~1e-5 Eh (different DF
 treatment); everything else matches to ~1e-10 Eh with `match_native_grids: true`. cuEST gradients always
