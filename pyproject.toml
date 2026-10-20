@@ -77,6 +77,7 @@ markers = [
     "pyscf: needs pyscf",
     "gpu: needs cupy/gpu4pyscf and a GPU",
     "cuest: needs nvidia-cuest and a GPU",
+    "byteqc: needs QC_LAUNCHER_BYTEQC_PYTHON pointing at a ByteQC environment (GPU)",
     "tblite: needs tblite",
     "mace: needs mace-torch and a MACE model file",
     "uma: needs fairchem-core and a UMA model file",

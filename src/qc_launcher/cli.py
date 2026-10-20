@@ -73,7 +73,7 @@ def _prepare_run(
 
 
 def launch_qc(config_path: str) -> None:
-    """opt -> single point -> (forces) -> freq -> irc, each enabled by its config block."""
+    """opt -> single point -> (forces) -> freq -> refine -> irc, each enabled by its config block."""
     config, atoms, filename, driver = _prepare_run(config_path)
 
     opt_config = normalize_task_config(config, "opt")
@@ -87,9 +87,14 @@ def launch_qc(config_path: str) -> None:
             raise ValueError("`forces` must be set to `true` to compute gradients.")
         load_task("grad")(driver)
 
+    thermo = None
     freq_config = normalize_task_config(config, "freq")
     if freq_config is not None:
-        load_task("freq")(driver, freq_config, filename)
+        thermo = load_task("freq")(driver, freq_config, filename)
+
+    refine_config = normalize_task_config(config, "refine")
+    if refine_config is not None:
+        load_task("refine")(driver, refine_config, filename, thermo=thermo)
 
     irc_config = normalize_task_config(config, "irc")
     if irc_config is not None:

@@ -1,22 +1,21 @@
 import argparse
 import os
-import io
 
-import numpy as np
 import ase.io
-from scipy.optimize import fsolve
-from pyscf import gto, dft
+import numpy as np
+from opencosmorspy.cosmors import COSMORS
+from opencosmorspy.parameterization import openCOSMORS24a
+from pyscf import dft, gto
 from pyscf.solvent import pcm
 from pyscf.solvent.cosmors import write_cosmo_file
-from opencosmorspy.parameterization import openCOSMORS24a
-from opencosmorspy.cosmors import COSMORS
+from scipy.optimize import fsolve
 
 
 def compute_ln_gamma(crs: COSMORS, mole_fractions: list[float], temp: float) -> float:
     """Compute ln(gamma) for a given composition at specified temperature using openCOSMO-RS"""
     crs.clear_jobs()
-    crs.add_job(np.array(mole_fractions), temp, refst='pure_component')
-    return crs.calculate()['tot']['lng'][0][0]
+    crs.add_job(np.array(mole_fractions), temp, refst="pure_component")
+    return crs.calculate()["tot"]["lng"][0][0]
 
 
 def solubility(crs: COSMORS, delta_h_fus: float, t_fus: float, temp: float = 298.15, iterative: bool = False) -> float:
@@ -27,7 +26,7 @@ def solubility(crs: COSMORS, delta_h_fus: float, t_fus: float, temp: float = 298
     if not iterative:
         ln_gamma_inf = compute_ln_gamma(crs, [0.0, 1.0], temp)
         return np.exp(rhs - ln_gamma_inf)
-    
+
     def equation(x_guess: float) -> float:
         """Equilibrium condition to be solved"""
         x_guess = np.clip(x_guess, 1e-15, 1).item()  # Ensure x_guess is within bounds
@@ -36,7 +35,7 @@ def solubility(crs: COSMORS, delta_h_fus: float, t_fus: float, temp: float = 298
         return np.abs(ln_gamma + np.log(x_guess) - rhs)
 
     result = fsolve(equation, 1e-5)
-    
+
     x_sol = np.clip(result[0], 1e-15, 1)  # Ensure the solution is within bounds
     return x_sol
 
