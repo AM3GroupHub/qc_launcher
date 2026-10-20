@@ -62,7 +62,7 @@ def probe_backend(python: str, backend: str, *, env: dict[str, str] | None = Non
     )
     if result.returncode != 0:
         hint = (
-            " (set refine.python to the ByteQC environment's interpreter and refine.pythonpath to the clone's parent)"
+            " (set refine.python to the ByteQC environment's interpreter and refine.pythonpath to a directory holding the ByteQC clone)"
             if backend == "byteqc"
             else ""
         )

@@ -11,8 +11,8 @@ freq: true
 
 refine:
   backend: byteqc
-  python: /scratch/e1554743/conda/envs/byteqc/bin/python  # interpreter of the ByteQC environment
-  pythonpath: /home/svu/e1554743/repo                     # parent directory of the ByteQC clone (not needed with a .pth file)
+  # python: /path/to/byteqc-env/bin/python   # only when ByteQC lives in a separate environment (default: this one)
+  # pythonpath: /path/to/dir-with-byteqc     # directory holding only the ByteQC clone, unless site-packages links it
   method: ccsd(t)  # mp2 | ccsd | ccsd(t)
   basis: cc-pVTZ
   auxbasis: null  # MP2: default MP2-fit; CCSD(T): reuse SCF fit (or set e.g. cc-pvtz-ri explicitly)

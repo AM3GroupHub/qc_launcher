@@ -176,7 +176,7 @@ or `auto`). Writes `<stem>_vib.txt` (PyVibMS format) and `<stem>_thermo.json`. S
 
 **refine** (MP2 / CCSD / CCSD(T) single point on the final geometry, run in a separate interpreter):
 `backend` (`pyscf` | `byteqc`), `python` (interpreter of the backend environment; default: the current one),
-`pythonpath` (prepended for the runner, e.g. the parent directory of a ByteQC clone), `method` (`ccsd(t)` |
+`pythonpath` (prepended for the runner; a directory holding only the ByteQC clone), `method` (`ccsd(t)` |
 `ccsd` | `mp2`), `basis` (cc-pVTZ), `auxbasis`, `ecp`, `frozen_core` (true, or a number of frozen orbitals),
 `conv_tol` (1e-8, CC amplitudes), `max_cycle` (100), `scf` (`{conv_tol: 1e-10, max_cycle: 100, density_fit:
 true, auxbasis, gpu: false}`), `ngpu` (1), `gpu_memory_gb` / `cpu_memory_gb` (ByteQC CCSD buffers), `scratch_dir`,
@@ -276,10 +276,10 @@ energy. The calculation is RHF followed by DF-MP2, CCSD or CCSD(T) and runs out 
 
 - `pyscf`: CPU pyscf (`pyscf.mp.dfmp2_native`, `pyscf.cc`); works in the qc_launcher environment itself.
 - `byteqc`: [ByteQC](https://github.com/bytedance/byteqc) (GPU DF-CCSD, CCSD(T) and DF-MP2; `cucc`,
-  `cump2`). ByteQC pins `pyscf == 2.5.0`, which is older than what qc_launcher needs, so it lives in its own
-  environment: `python` points at that environment's interpreter and `pythonpath` at the parent directory of
-  the ByteQC clone (ByteQC is source-only). The runner's own imports are limited to the standard library,
-  numpy and pyscf. ByteQC's DF-MP2 has no frozen-core option (a warning is printed); CCSD/CCSD(T) use `frozen_core`.
+  `cump2`). ByteQC can live in the qc_launcher environment itself (its nominal `pyscf == 2.5.0` pin is not
+  binding: pyscf 2.10 and 2.14 give identical energies) or in a separate environment, in which case `python`
+  points at that interpreter and `pythonpath` at a directory holding the ByteQC clone and nothing else (ByteQC
+  is source-only). The runner's own imports are limited to the standard library, numpy and pyscf. ByteQC's DF-MP2 has no frozen-core option (a warning is printed); CCSD/CCSD(T) use `frozen_core`.
   By default the reference RHF runs on the CPU with pyscf (density fitted when `scf.density_fit` is true).
   `scf: {gpu: true}` runs it with ByteQC's `cuobc` RHF instead: exact integrals on the GPU, as in ByteQC's own
   examples, with the DF wrapper added afterwards for the correlated step.
@@ -300,36 +300,56 @@ where `E0` is the driver's electronic energy, i.e. the driver's ZPE and thermal 
 the electronic energy is replaced. `<stem>_refine.json` holds `e_hf`, the correlation pieces (`e_corr_mp2`,
 `e_corr_ccsd`, `e_t`), `e_total` (Eh), timings, the backend versions and the `composite` block.
 
-A ByteQC environment that worked on an A40 (CUDA 12.8, x86_64):
+ByteQC needs CuPy 14 with its cuTENSOR bindings (the multi-GPU `contractionMg` call), cuTENSOR 2.x,
+nvmath-python and h5py. In the qc_launcher environment on an x86_64 / CUDA 12 machine (verified on an A40 with
+pyscf 2.10, gpu4pyscf 1.8.1 and cuEST, which all keep working on CuPy 14):
 
 ```bash
-conda create -n byteqc -c conda-forge python=3.11 "numpy<2" scipy h5py cmake make "cutensor>=2.1" cuda-version=12.8
-conda activate byteqc
-pip install pyscf==2.5.0 "cupy-cuda12x>=14" "nvmath-python[cu12]"
+pip install "cupy-cuda12x>=14,<15" cutensor-cu12 "nvmath-python[cu12]" h5py cmake
+SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+ln -sfn $SITE/cutensor/lib/libcutensor*.so* $CONDA_PREFIX/lib/      # CuPy finds the libraries there
 git clone https://github.com/bytedance/byteqc.git ~/repo/byteqc && cd ~/repo/byteqc
 # ByteQC's CMake wants $CUTENSOR_ROOT/lib/12/libcutensor.so and $CUTENSOR_ROOT/include/cutensor.h
-mkdir -p $CONDA_PREFIX/cutensor_root/lib && ln -sfn $CONDA_PREFIX/lib $CONDA_PREFIX/cutensor_root/lib/12 \
-  && ln -sfn $CONDA_PREFIX/include $CONDA_PREFIX/cutensor_root/include
-export CUTENSOR_ROOT=$CONDA_PREFIX/cutensor_root CUDA_ARCHITECTURES=86   # sm_86 = A40
-for sub in cuobc cupbc; do cmake $sub/lib -B $sub/lib/build && make -j16 -C $sub/lib/build; done
-echo ~/repo > $CONDA_PREFIX/lib/python3.11/site-packages/byteqc.pth   # or pass refine.pythonpath instead
+ROOT=$CONDA_PREFIX/cutensor_root; mkdir -p $ROOT/lib/12
+ln -sfn $SITE/cutensor/lib/libcutensor.so.2 $ROOT/lib/12/libcutensor.so && ln -sfn $SITE/cutensor/include $ROOT/include
+export CUTENSOR_ROOT=$ROOT
+for sub in cuobc cupbc; do cmake $sub/lib -B $sub/lib/build -DCUDA_ARCHITECTURES=86 && make -j16 -C $sub/lib/build; done
+ln -s ~/repo/byteqc $SITE/byteqc      # register the clone (see the note on .pth files below)
 python -c "import byteqc.cucc, byteqc.cump2"
 ```
 
-On an aarch64 host with a CUDA 13 driver (DGX Spark / GB10, sm_121) the same recipe works with a conda CUDA 12.9
-toolchain, except that the aarch64 CuPy wheel lacks the cuTENSOR bindings ByteQC imports, so CuPy is built
-from source (about 15 minutes):
+Register the clone with a symlink in site-packages (or `refine.pythonpath` pointing at a directory that holds
+only ByteQC), not with a `.pth` file naming a directory of clones: every sibling clone there (`sella`, `pygsm`,
+...) would become a namespace package that shadows its editable install.
+
+`CUDA_ARCHITECTURES` must be given to CMake as shown (sm_86 = A40): ByteQC reads it as a CMake variable, not from
+the environment, and `native` on a GPU-less login node compiles for an old architecture and fails. A separate
+conda environment works the same way with conda-forge `cutensor` (`conda create -n byteqc -c conda-forge
+python=3.11 "numpy<2" scipy h5py cmake make "cutensor>=2.1" cuda-version=12.8`, then the pip line without
+`cutensor-cu12` and `CUTENSOR_ROOT` symlinked to `$CONDA_PREFIX/lib` and `$CONDA_PREFIX/include`).
+
+On an aarch64 host with a CUDA 13 driver (DGX Spark / GB10, sm_121) the aarch64 CuPy wheels lack the cuTENSOR
+bindings, so CuPy is built from source against the system toolkit (about 15 minutes; verified in the qc_launcher
+environment with pyscf 2.14, gpu4pyscf master and cuEST, which keep working on the rebuilt CuPy):
 
 ```bash
-conda create -n byteqc-gb10 -c conda-forge python=3.11 scipy h5py cmake make "cutensor>=2.1" cuda-version=12.9 \
-  cuda-nvcc=12.9 cuda-cudart-dev=12.9 cuda-nvrtc-dev=12.9 cuda-profiler-api=12.9 libcublas-dev libcusolver-dev \
-  libcusparse-dev libcurand-dev libcufft-dev "gcc_linux-aarch64=13" "gxx_linux-aarch64=13"
-conda activate byteqc-gb10 && pip install pyscf==2.5.0 "nvmath-python[cu12]"
-export CUDA_PATH=$CONDA_PREFIX CUTENSOR_PATH=$CONDA_PREFIX CUPY_NUM_BUILD_JOBS=16 \
-  CUPY_NVCC_GENERATE_CODE="arch=compute_121,code=sm_121" CPATH=$CONDA_PREFIX/targets/sbsa-linux/include:$CONDA_PREFIX/include
-pip install --no-binary cupy "cupy>=14"
-# then build ByteQC as above with CUDA_ARCHITECTURES=121 and -DCMAKE_CUDA_COMPILER=$CONDA_PREFIX/bin/nvcc
+pip install cutensor-cu13 "nvmath-python[sysctk13]" h5py cmake   # sysctk13: use the system CUDA 13 toolkit, no library wheels
+SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+ROOT=$CONDA_PREFIX/cutensor_root; mkdir -p $ROOT/lib/12
+ln -sfn $SITE/cutensor/lib/libcutensor.so.2 $ROOT/lib/libcutensor.so && ln -sfn $SITE/cutensor/lib/libcutensorMg.so.2 $ROOT/lib/libcutensorMg.so
+ln -sfn $SITE/cutensor/lib/libcutensor.so.2 $ROOT/lib/12/libcutensor.so && ln -sfn $SITE/cutensor/include $ROOT/include
+ln -sfn $SITE/cutensor/lib/libcutensor*.so* $CONDA_PREFIX/lib/
+pip uninstall -y cupy-cuda13x
+export CUDA_PATH=/usr/local/cuda CUTENSOR_PATH=$ROOT CUPY_NUM_BUILD_JOBS=16 CUPY_NVCC_GENERATE_CODE="arch=compute_121,code=sm_121"
+pip install --no-binary cupy "cupy==14.2.0"
+# then build ByteQC as above with -DCUDA_ARCHITECTURES=121 -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 ```
+
+(`pip check` then reports gpu4pyscf's `cupy-cuda13x` requirement as missing; the source build provides the same
+package.) A separate environment with a conda CUDA 12.9 toolchain works the same way (`conda create -n byteqc-gb10
+-c conda-forge python=3.11 scipy h5py cmake make "cutensor>=2.1" cuda-version=12.9 cuda-nvcc=12.9 cuda-cudart-dev=12.9
+cuda-nvrtc-dev=12.9 cuda-profiler-api=12.9 libcublas-dev libcusolver-dev libcusparse-dev libcurand-dev libcufft-dev
+"gcc_linux-aarch64=13" "gxx_linux-aarch64=13"`, `CUDA_PATH=$CUTENSOR_PATH=$CONDA_PREFIX`).
 
 On such a unified-memory machine set `gpu_memory_gb` and `cpu_memory_gb` (for example 40 and 30 on a 128 GB
 GB10): ByteQC's default CCSD pool budgets are 75% of total device memory for GPU buffers and three times total
@@ -339,8 +359,9 @@ DF-MP2 allocations. The runner also works around a ByteQC
 DF-CCSD bug with frozen orbitals (its integral transformation reuses a buffer sized for the active orbitals; the
 next DF block can fail with `buf is not enough` when that buffer is too small to unpack the AO integrals).
 
-Then in the YAML: `refine: {backend: byteqc, python: <env>/bin/python, method: ccsd(t), basis: cc-pVTZ}`.
-The `byteqc`-marked tests run when `QC_LAUNCHER_BYTEQC_PYTHON` names that interpreter.
+Then in the YAML: `refine: {backend: byteqc, method: ccsd(t), basis: cc-pVTZ}`, plus `python: <env>/bin/python`
+when ByteQC lives in a separate environment. The `byteqc`-marked tests run when `QC_LAUNCHER_BYTEQC_PYTHON`
+names an interpreter that imports ByteQC (the current one included).
 
 ## Examples
 

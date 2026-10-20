@@ -96,6 +96,27 @@ def _patch_byteqc_df_eris() -> None:
     dfccsd.nr_e2 = nr_e2
 
 
+def _patch_byteqc_cuobc_eigh() -> None:
+    """pyscf >= 2.11 calls the SCF eigensolver hook as ``_eigh(h, s, overwrite, x)``; ByteQC's cuobc RHF defines
+    ``_eigh(h, s)``. Forward to ByteQC when no orthogonalization matrix is given, else use pyscf's own routine."""
+    import inspect
+
+    from byteqc.cuobc.scf import hf as cuhf
+    from pyscf.scf import hf as pyhf
+
+    original = cuhf.RHF._eigh
+    if getattr(original, "_qc_launcher_patched", False) or len(inspect.signature(original).parameters) >= 5:
+        return
+
+    def _eigh(mf, h, s, overwrite=False, x=None):
+        if x is None:
+            return original(mf, h, s)
+        return pyhf.SCF._eigh(mf, h, s, overwrite, x)
+
+    _eigh._qc_launcher_patched = True
+    cuhf.RHF._eigh = _eigh
+
+
 def run(spec: dict) -> dict:
     scratch = spec.get("scratch_dir")
     if scratch:
@@ -140,6 +161,7 @@ def run(spec: dict) -> dict:
         # is added afterwards, without re-running the SCF, so that the correlated step uses DF integrals.
         from byteqc.cuobc import scf as cuscf
 
+        _patch_byteqc_cuobc_eigh()
         mf = cuscf.RHF(mol)
     else:
         mf = scf.RHF(mol)
