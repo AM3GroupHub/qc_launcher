@@ -54,15 +54,15 @@ def composite_thermochemistry(thermo: dict, e_refined: float) -> dict[str, float
     return composite
 
 
-def probe_backend(python: str, backend: str) -> None:
+def probe_backend(python: str, backend: str, *, env: dict[str, str] | None = None) -> None:
     """Fail early when the interpreter cannot import what the backend needs."""
     module = "byteqc.cucc, byteqc.cump2" if backend == "byteqc" else "pyscf"
     result = subprocess.run(
-        [python, "-c", f"import {module}"], capture_output=True, text=True, timeout=600, check=False
+        [python, "-c", f"import {module}"], capture_output=True, text=True, env=env, timeout=600, check=False
     )
     if result.returncode != 0:
         hint = (
-            " (set refine.python to the ByteQC environment's interpreter and PYTHONPATH to the clone's parent)"
+            " (set refine.python to the ByteQC environment's interpreter and refine.pythonpath to the clone's parent)"
             if backend == "byteqc"
             else ""
         )
@@ -74,7 +74,7 @@ def run_refine(driver: BaseDriver, config: dict, filename: str = "molecule", the
     default: the current one), ``pythonpath`` (prepended for the runner), ``method`` (ccsd(t) | ccsd | mp2),
     ``basis`` (cc-pVTZ), ``auxbasis`` (pyscf default), ``ecp``, ``frozen_core`` (True; or an orbital count),
     ``conv_tol`` (1e-8), ``max_cycle`` (100), ``scf`` ({conv_tol: 1e-10, max_cycle: 100, density_fit: True,
-    auxbasis}), ``ngpu`` (1), ``gpu_memory_gb``, ``cpu_memory_gb``, ``scratch_dir``, ``max_memory_mb``,
+    gpu: False, auxbasis}), ``ngpu`` (1), ``gpu_memory_gb``, ``cpu_memory_gb``, ``scratch_dir``, ``max_memory_mb``,
     ``verbose`` (3), ``timeout_s``, ``outputfile`` ({filename}_refine.json).
 
     Returns the runner's results plus the composite thermochemistry; closed-shell systems only.
@@ -92,7 +92,12 @@ def run_refine(driver: BaseDriver, config: dict, filename: str = "molecule", the
         python = str(config.get("python") or sys.executable)
         if not os.path.exists(python):
             raise ValueError(f"refine.python '{python}' does not exist.")
-        probe_backend(python, backend)
+        env = dict(os.environ)
+        if config.get("pythonpath"):
+            env["PYTHONPATH"] = os.pathsep.join([str(config["pythonpath"]), env.get("PYTHONPATH", "")]).rstrip(
+                os.pathsep
+            )
+        probe_backend(python, backend, env=env)
 
         spec: dict[str, Any] = {
             "backend": backend,
@@ -121,11 +126,6 @@ def run_refine(driver: BaseDriver, config: dict, filename: str = "molecule", the
         input_path.write_text(json.dumps(spec, indent=2))
         raw_path.unlink(missing_ok=True)
 
-        env = dict(os.environ)
-        if config.get("pythonpath"):
-            env["PYTHONPATH"] = os.pathsep.join([str(config["pythonpath"]), env.get("PYTHONPATH", "")]).rstrip(
-                os.pathsep
-            )
         timeout = config.get("timeout_s")
         print(f"Refinement: {method.upper()}/{spec['basis']} with backend '{backend}' ({python}); log: {log_path}")
         with open(log_path, "w") as log:
@@ -144,6 +144,10 @@ def run_refine(driver: BaseDriver, config: dict, filename: str = "molecule", the
         if "error" in results:
             raise RuntimeError(
                 f"The refinement runner failed: {results['error']}\n{results.get('traceback', '')[-2000:]}"
+            )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"The refinement runner failed (exit code {proc.returncode}).\n{log_path.read_text()[-2000:]}"
             )
 
         for warning in results.get("warnings", []):

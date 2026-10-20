@@ -15,7 +15,7 @@ refine:
   pythonpath: /home/svu/e1554743/repo                     # parent directory of the ByteQC clone (not needed with a .pth file)
   method: ccsd(t)  # mp2 | ccsd | ccsd(t)
   basis: cc-pVTZ
-  auxbasis: null  # pyscf default (MP2-fit for cc-pVTZ)
+  auxbasis: null  # MP2: default MP2-fit; CCSD(T): reuse SCF fit (or set e.g. cc-pvtz-ri explicitly)
   frozen_core: true
   scf:
     conv_tol: 1.0e-10

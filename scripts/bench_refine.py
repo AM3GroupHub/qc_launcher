@@ -15,7 +15,7 @@ from pathlib import Path
 
 import ase.io
 
-from qc_launcher.tasks.refine import run_refine
+from qc_launcher.tasks.refine import BACKENDS, METHODS, run_refine
 
 
 class _Driver:
@@ -27,8 +27,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("xyz")
     parser.add_argument("--basis", default="cc-pVDZ")
-    parser.add_argument("--methods", nargs="+", default=["mp2", "ccsd", "ccsd(t)"])
-    parser.add_argument("--backends", nargs="+", default=["pyscf", "byteqc"])
+    parser.add_argument("--methods", nargs="+", type=str.lower, choices=METHODS, default=list(METHODS))
+    parser.add_argument("--backends", nargs="+", type=str.lower, choices=BACKENDS, default=list(BACKENDS))
     parser.add_argument("--python", default=sys.executable, help="interpreter running the backends")
     parser.add_argument("--all-electron", action="store_true", help="no frozen core")
     parser.add_argument("--charge", type=int, default=0)
@@ -44,6 +44,7 @@ def main(argv=None) -> int:
     atoms.info.update(charge=args.charge, multiplicity=1)
     stem = Path(args.xyz).stem
     rows = []
+    failed = False
     for method in args.methods:
         results = {}
         for backend in args.backends:
@@ -78,6 +79,7 @@ def main(argv=None) -> int:
                     )
                 )
             except Exception as exc:  # noqa: BLE001 - keep benchmarking the other cases
+                failed = True
                 rows.append(
                     (
                         method,
@@ -91,9 +93,9 @@ def main(argv=None) -> int:
                     )
                 )
         if len(results) == 2:
-            a, b = (results[k] for k in args.backends[:2])
+            (backend_a, a), (backend_b, b) = results.items()
             print(
-                f"\n{method.upper()}: {args.backends[0]} - {args.backends[1]}: dE_HF = {a['e_hf'] - b['e_hf']:.3e}, dE_corr = {a['e_corr'] - b['e_corr']:.3e} Eh"
+                f"\n{method.upper()}: {backend_a} - {backend_b}: dE_HF = {a['e_hf'] - b['e_hf']:.3e}, dE_corr = {a['e_corr'] - b['e_corr']:.3e} Eh"
             )
 
     print(f"\n{stem} / {args.basis} ({len(atoms)} atoms)")
@@ -123,7 +125,7 @@ def main(argv=None) -> int:
             indent=2,
         )
     )
-    return 0
+    return int(failed)
 
 
 if __name__ == "__main__":

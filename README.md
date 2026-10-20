@@ -275,6 +275,11 @@ energy. The calculation is RHF followed by DF-MP2, CCSD or CCSD(T) and runs out 
   `scf: {gpu: true}` runs it with ByteQC's `cuobc` RHF instead: exact integrals on the GPU, as in ByteQC's own
   examples, with the DF wrapper added afterwards for the correlated step.
 
+`auxbasis` selects the correlation fit independently of `scf.auxbasis`. An explicit value enables DF for
+CCSD/CCSD(T) even when the reference SCF uses exact integrals (`scf.density_fit: false`). With `auxbasis: null`,
+MP2 chooses its default MP2-fit basis; CCSD/CCSD(T) reuse the SCF fit when present and otherwise use conventional
+integrals. `scf.gpu: true` always uses exact SCF integrals, so its reference energy can differ from a CPU DF-SCF run.
+
 When `freq` ran in the same `qc` call (or `<stem>_thermo.json` exists next to the input), the thermochemical
 totals are recombined with the refined energy:
 
@@ -318,10 +323,12 @@ pip install --no-binary cupy "cupy>=14"
 ```
 
 On such a unified-memory machine set `gpu_memory_gb` and `cpu_memory_gb` (for example 40 and 30 on a 128 GB
-GB10): ByteQC sizes its CCSD buffers from the free GPU memory and the free host memory separately, which is the
-same memory there, and an unlimited run gets killed by the OOM killer. The runner also works around a ByteQC
+GB10): ByteQC's default CCSD pool budgets are 75% of total device memory for GPU buffers and three times total
+device memory for host buffers. Both draw from the same physical memory there, so the defaults can cause an OOM
+kill. These settings budget CCSD pool buffers, not total process memory; they do not limit reference SCF or
+DF-MP2 allocations. The runner also works around a ByteQC
 DF-CCSD bug with frozen orbitals (its integral transformation reuses a buffer sized for the active orbitals; the
-second DF block of any molecule with more than 240 auxiliary functions fails with `buf is not enough`).
+next DF block can fail with `buf is not enough` when that buffer is too small to unpack the AO integrals).
 
 Then in the YAML: `refine: {backend: byteqc, python: <env>/bin/python, method: ccsd(t), basis: cc-pVTZ}`.
 The `byteqc`-marked tests run when `QC_LAUNCHER_BYTEQC_PYTHON` names that interpreter.

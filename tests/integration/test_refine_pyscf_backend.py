@@ -33,9 +33,9 @@ def test_pyscf_backend_matches_direct_pyscf(in_tmp, water, method):
     result = run_refine(FakeDriver(water), config, "water")
     e_hf, e_corr = reference(water, method, frozen=1)
     assert result["n_frozen"] == 1
-    assert result["e_hf"] == pytest.approx(e_hf, abs=1e-9)
-    assert result["e_corr"] == pytest.approx(e_corr, abs=1e-8)
-    assert result["e_total"] == pytest.approx(e_hf + e_corr, abs=1e-8)
+    assert result["e_hf"] == pytest.approx(e_hf, rel=0, abs=1e-9)
+    assert result["e_corr"] == pytest.approx(e_corr, rel=0, abs=1e-8)
+    assert result["e_total"] == pytest.approx(e_hf + e_corr, rel=0, abs=1e-8)
     assert result["versions"]["pyscf"]
 
 
@@ -47,4 +47,34 @@ def test_all_electron_option(in_tmp, water):
     )
     e_hf, e_corr = reference(water, "mp2", frozen=None)
     assert result["n_frozen"] == 0
-    assert result["e_corr"] == pytest.approx(e_corr, abs=1e-8)
+    assert result["e_corr"] == pytest.approx(e_corr, rel=0, abs=1e-8)
+
+
+@pytest.mark.parametrize("density_fit", [True, False])
+def test_ccsd_uses_correlation_auxbasis(in_tmp, water, density_fit):
+    from pyscf import df, gto, scf
+    from pyscf.cc.dfccsd import RCCSD
+
+    mol = gto.M(atom=list(zip(water.get_chemical_symbols(), water.get_positions())), basis="sto-3g", verbose=0)
+    mf = scf.RHF(mol)
+    if density_fit:
+        mf = mf.density_fit(auxbasis="weigend")
+    mf.conv_tol = 1e-10
+    e_hf = mf.kernel()
+    mcc = RCCSD(mf, frozen=1)
+    mcc.with_df = df.DF(mol, auxbasis="cc-pvdz-ri")
+    mcc.conv_tol = 1e-8
+    e_corr = mcc.kernel()[0]
+    result = run_refine(
+        FakeDriver(water),
+        {
+            "method": "ccsd",
+            "basis": "sto-3g",
+            "auxbasis": "cc-pvdz-ri",
+            "scf": {"density_fit": density_fit, "auxbasis": "weigend"},
+            "verbose": 0,
+        },
+        "water",
+    )
+    assert result["e_hf"] == pytest.approx(e_hf, rel=0, abs=1e-9)
+    assert result["e_corr"] == pytest.approx(e_corr, rel=0, abs=1e-8)

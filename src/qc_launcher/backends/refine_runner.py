@@ -205,6 +205,11 @@ def run(spec: dict) -> dict:
             from pyscf import cc
 
             mcc = cc.CCSD(mf, frozen=frozen)
+        if auxbasis is not None:
+            from pyscf import df
+
+            # Keep the SCF fit and its cached integrals separate from the correlation fit.
+            mcc = mcc.density_fit(auxbasis=auxbasis, with_df=df.DF(mol, auxbasis=auxbasis))
         mcc.verbose = verbose
         mcc.conv_tol = conv_tol
         mcc.max_cycle = max_cycle

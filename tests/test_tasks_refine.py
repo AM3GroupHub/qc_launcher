@@ -50,7 +50,7 @@ def stub_runner(tmp_path, monkeypatch):
         )
     )
     monkeypatch.setattr(refine, "runner_path", lambda: str(script))
-    monkeypatch.setattr(refine, "probe_backend", lambda python, backend: None)
+    monkeypatch.setattr(refine, "probe_backend", lambda python, backend, **kwargs: None)
     return script
 
 
@@ -81,6 +81,30 @@ def test_run_refine_without_thermo(in_tmp, water, stub_runner):
 def test_runner_failure_is_reported(in_tmp, water, stub_runner):
     with pytest.raises(RuntimeError, match="boom"):
         run_refine(FakeDriver(water), {"basis": "fail"}, "water")
+
+
+def test_pythonpath_is_used_by_probe_and_runner(in_tmp, water, monkeypatch):
+    package = in_tmp / "external" / "byteqc"
+    package.mkdir(parents=True)
+    for name in ("__init__", "cucc", "cump2"):
+        (package / f"{name}.py").write_text("")
+    script = in_tmp / "runner.py"
+    script.write_text(
+        "import byteqc.cucc, byteqc.cump2, json, sys\n"
+        "json.dump({'e_hf': -1.0, 'e_corr': -0.1, 'e_total': -1.1}, open(sys.argv[2], 'w'))\n"
+    )
+    monkeypatch.setattr(refine, "runner_path", lambda: str(script))
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    result = run_refine(FakeDriver(water), {"backend": "byteqc", "pythonpath": str(package.parent)}, "water")
+    assert result["e_total"] == -1.1
+
+
+def test_nonzero_runner_exit_rejects_written_result(in_tmp, water, stub_runner):
+    with stub_runner.open("a") as handle:
+        handle.write("sys.exit(7)\n")
+    with pytest.raises(RuntimeError, match="exit code 7"):
+        run_refine(FakeDriver(water), {}, "water")
+    assert not (in_tmp / "water_refine.json").exists()
 
 
 def test_validation(in_tmp, water, stub_runner):
