@@ -11,6 +11,7 @@ driver:
   max_memory: 1  # GB
 
 opt:
+  optimizer: sella  # default; geometric = geomeTRIC, see 4-geometric.yaml
   ts: false  # default
   calc_hess: false  # default: false when ts=false, true when ts=true
   trajectory: water_opt.traj  # ${inputfile}_opt.traj

@@ -2,9 +2,9 @@
 
 `qc_launch` is a small YAML-driven command line for routine computational chemistry on ASE-based
 drivers: PySCF / gpu4pyscf (DFT, CPU or GPU), tblite (GFN1/GFN2-xTB), MACE and FAIRChem UMA (machine-learned
-potentials). On top of the drivers it runs single points, Sella minimum / transition-state optimizations and
-IRCs, harmonic frequencies with RRHO and quasi-RRHO thermochemistry, ASE NEB / AutoNEB, the growing string
-method (pygsm), molecular dynamics, and a calculator bridge for pysisyphus.
+potentials). On top of the drivers it runs single points, minimum / transition-state optimizations (Sella or
+geomeTRIC) and IRCs, harmonic frequencies with RRHO and quasi-RRHO thermochemistry, ASE NEB / AutoNEB, the
+growing string method (pygsm), molecular dynamics, and a calculator bridge for pysisyphus.
 
 ## Installation
 
@@ -281,6 +281,6 @@ python -m pytest -q -m "not slow and not gpu"
 ruff check src tests && ruff format --check src tests
 ```
 
-Integration tests are marked `pyscf`, `gpu`, `tblite`, `mace`, `uma`, `sella`, `pygsm`, `pysisyphus` and
-`slow`, and skip automatically when the package (or the model file, via `QC_LAUNCHER_MACE_MODEL` /
+Integration tests are marked `pyscf`, `gpu`, `tblite`, `mace`, `uma`, `sella`, `geometric`, `pygsm`, `pysisyphus`
+and `slow`, and skip automatically when the package (or the model file, via `QC_LAUNCHER_MACE_MODEL` /
 `QC_LAUNCHER_UMA_MODEL`) is missing. Run the suite once per environment that provides a backend.

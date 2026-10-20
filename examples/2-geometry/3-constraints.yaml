@@ -11,6 +11,7 @@ driver:
   max_memory: 1  # GB
 
 opt:
+  optimizer: sella  # the same constraints block works with optimizer: geometric
   constraints:
     fix_bond: [[0, 1], [0, 2]]  # fix two O-H bonds
     # fix_angle: [[1, 0, 2]]  # fix the H-O-H angle
