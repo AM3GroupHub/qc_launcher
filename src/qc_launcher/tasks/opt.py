@@ -1,4 +1,4 @@
-"""Minimum and transition-state optimization with Sella, Gaussian-style convergence criteria."""
+"""Minimum and transition-state optimization: Sella (default) or geomeTRIC, Gaussian-style convergence criteria."""
 
 from __future__ import annotations
 
@@ -34,7 +34,25 @@ def setup_constraints(atoms: Atoms, cons_dict: dict | None) -> Constraints | Non
     return cons
 
 
+OPTIMIZERS = ("sella", "geometric")
+
+
 def run_opt(driver: BaseDriver, config: dict, filename: str = "molecule") -> None:
+    """``optimizer`` (sella | geometric) selects the engine; see ``run_opt_sella`` and ``opt_geometric.run_opt_geometric``
+    for the keys. ``ts``, ``calc_hess``, ``trajectory``, ``outputfile``, ``constraints``, ``max_steps`` and the
+    convergence criteria mean the same for both."""
+    optimizer = str(config.get("optimizer", "sella")).lower()
+    if optimizer == "sella":
+        run_opt_sella(driver, config, filename)
+    elif optimizer == "geometric":
+        from .opt_geometric import run_opt_geometric
+
+        run_opt_geometric(driver, config, filename)
+    else:
+        raise ValueError(f"Unknown optimizer '{optimizer}'. Use one of {OPTIMIZERS}.")
+
+
+def run_opt_sella(driver: BaseDriver, config: dict, filename: str = "molecule") -> None:
     """Config keys (defaults): ``ts`` (False), ``calc_hess`` (= ts), ``internal`` (True), ``trajectory``,
     ``outputfile``, ``delta0`` (0.1), ``eta`` (1e-4), ``gamma`` (0.1), ``nsteps_per_diag`` (3), ``diag_every_n``,
     ``constraints``, ``constraints_tol`` (1e-5), ``max_steps`` (150) and the convergence criteria ``ediff`` [eV],

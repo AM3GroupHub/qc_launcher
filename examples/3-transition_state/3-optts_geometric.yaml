@@ -1,0 +1,16 @@
+# qc_launch qc 3-optts_geometric.yaml
+# Transition-state search with geomeTRIC; the driver's exact Hessian is handed to geomeTRIC at the first step.
+inputfile: da.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+
+opt:
+  optimizer: geometric
+  ts: true
+  calc_hess: true  # default for ts: true; false -> geomeTRIC's finite-difference Hessian (hessian: first)
+  trust: 0.01  # geomeTRIC defaults for TS searches
+  tmax: 0.03
+
+freq: true

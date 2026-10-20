@@ -38,6 +38,9 @@ gsm = [
 pysisyphus = [
     "pysisyphus",
 ]
+geometric = [
+    "geometric",
+]
 mace = [
     "mace-torch",
 ]
@@ -81,6 +84,7 @@ markers = [
     "mace: needs mace-torch and a MACE model file",
     "uma: needs fairchem-core and a UMA model file",
     "sella: needs sella",
+    "geometric: needs geomeTRIC",
     "pygsm: needs pygsm",
     "pysisyphus: needs pysisyphus",
     "slow: takes more than ~30 s",

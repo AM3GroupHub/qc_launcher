@@ -18,6 +18,7 @@ MARKER_PACKAGES = {
     "mace": "mace",
     "uma": "fairchem",
     "sella": "sella",
+    "geometric": "geometric",
     "pygsm": "pygsm",
     "pysisyphus": "pysisyphus",
 }
