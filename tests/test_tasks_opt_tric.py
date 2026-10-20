@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from qc_launcher.tasks import load_task
-from qc_launcher.tasks.opt_geometric import convergence_kwargs, geometric_constraints
+from qc_launcher.tasks.opt_tric import convergence_kwargs, geometric_constraints
 
 from .helpers import FakeDriver
 
@@ -41,10 +41,10 @@ def test_unknown_optimizer(water):
 
 
 def test_dispatch_to_geometric(water, monkeypatch):
-    from qc_launcher.tasks import opt_geometric
+    from qc_launcher.tasks import opt_tric
 
     calls = []
-    monkeypatch.setattr(opt_geometric, "run_opt_geometric", lambda driver, config, filename: calls.append(filename))
+    monkeypatch.setattr(opt_tric, "run_opt_geometric", lambda driver, config, filename: calls.append(filename))
     load_task("opt")(FakeDriver(water), {"optimizer": "GeomeTRIC"}, "water")
     assert calls == ["water"]
 
@@ -59,7 +59,7 @@ class TestGeometricWithTBLite:
         return TBLiteDriver(atoms, {"verbosity": 0}, verbose=False)
 
     def test_minimization(self, in_tmp, water):
-        from qc_launcher.tasks.opt_geometric import run_opt_geometric
+        from qc_launcher.tasks.opt_tric import run_opt_geometric
 
         water.set_distance(0, 1, 1.1, fix=0)
         driver = self.make_driver(water)
@@ -84,7 +84,7 @@ class TestGeometricWithTBLite:
         assert water.get_distance(0, 2) == pytest.approx(0.96, abs=0.03)
 
     def test_unconverged_run_still_writes_outputs(self, in_tmp, water):
-        from qc_launcher.tasks.opt_geometric import run_opt_geometric
+        from qc_launcher.tasks.opt_tric import run_opt_geometric
 
         water.set_distance(0, 1, 1.3, fix=0)
         driver = self.make_driver(water)
@@ -100,7 +100,7 @@ class TestGeometricWithTBLite:
     def test_ts_search_uses_driver_hessian(self, in_tmp):
         import ase.io
 
-        from qc_launcher.tasks.opt_geometric import run_opt_geometric
+        from qc_launcher.tasks.opt_tric import run_opt_geometric
 
         da = ase.io.read(str(EXAMPLES / "3-transition_state" / "da.xyz"))
         driver = self.make_driver(da)

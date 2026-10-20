@@ -1,4 +1,5 @@
-"""Minimum and transition-state optimization with geomeTRIC (pyscf's optimizer), same config keys as the Sella path.
+"""Minimum and transition-state optimization with geomeTRIC (pyscf's optimizer; ``optimizer: geometric``), same config
+keys as the Sella path.
 
 geomeTRIC drives the driver's ASE calculator through a custom engine (energies in Hartree, gradients in
 Hartree/Bohr); the exact Hessian of the driver is handed over as a Hessian file when ``calc_hess`` is set.

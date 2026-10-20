@@ -26,7 +26,7 @@ def test_bond_constraint_is_kept(in_tmp, water):
 
 
 def test_unknown_constraint_type(water):
-    from qc_launcher.tasks.opt import setup_constraints
+    from qc_launcher.tasks.opt_sella import setup_constraints
 
     with pytest.raises(ValueError, match="Unknown constraint types"):
         setup_constraints(water, {"fix_everything": [1]})
