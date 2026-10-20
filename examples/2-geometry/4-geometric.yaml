@@ -1,0 +1,21 @@
+# qc_launch qc 4-geometric.yaml
+# Minimization with geomeTRIC (pyscf's optimizer) instead of Sella; same constraints and criteria keys.
+inputfile: water.xyz
+
+driver:
+  name: tblite
+  method: GFN2-xTB
+
+opt:
+  optimizer: geometric
+  coordsys: tric  # tric | dlc | hdlc | prim | cart
+  convergence_set: GAU  # geomeTRIC set used for criteria not given below (GAU = Gaussian defaults)
+  fmax: 0.023  # (eV/Å) Gaussian default; ediff, frms, dmax, drms as for Sella
+  max_steps: 150
+  # constraints:
+  #   fix_bond: [[0, 1]]
+  trajectory: water_opt.traj
+  outputfile: water_opt.xyz
+  prefix: water_geometric  # water_geometric.log, water_geometric_optim.xyz, water_geometric.tmp/
+
+freq: true

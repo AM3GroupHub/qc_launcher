@@ -2,9 +2,9 @@
 
 `qc_launch` is a small YAML-driven command line for routine computational chemistry on ASE-based
 drivers: PySCF / gpu4pyscf (DFT, CPU or GPU), tblite (GFN1/GFN2-xTB), MACE and FAIRChem UMA (machine-learned
-potentials). On top of the drivers it runs single points, Sella minimum / transition-state optimizations and
-IRCs, harmonic frequencies with RRHO and quasi-RRHO thermochemistry, ASE NEB / AutoNEB, the growing string
-method (pygsm), molecular dynamics, and a calculator bridge for pysisyphus.
+potentials). On top of the drivers it runs single points, minimum / transition-state optimizations (Sella or
+geomeTRIC) and IRCs, harmonic frequencies with RRHO and quasi-RRHO thermochemistry, ASE NEB / AutoNEB, the
+growing string method (pygsm), molecular dynamics, and a calculator bridge for pysisyphus.
 
 ## Installation
 
@@ -16,6 +16,7 @@ pip install -e .[mace]              # MACE driver (mace-torch)
 pip install -e .[fairchem]          # UMA driver (fairchem-core)
 pip install -e .[gsm]               # growing string method (forked pygsm: X1X1010/pygsm)
 pip install -e .[pysisyphus]        # pysisyphus bridge
+pip install -e .[geometric]         # geomeTRIC optimizer (optimizer: geometric)
 pip install -e .[dev]               # pytest, ruff
 ```
 
@@ -155,11 +156,19 @@ Hessians come from MACE's analytic `get_hessian`.
 
 ### Tasks
 
-**opt** (Sella): `ts` (false), `calc_hess` (= `ts`), `internal` (true), `trajectory`, `outputfile`, `delta0`
-(0.1), `eta` (1e-4), `gamma` (0.1), `nsteps_per_diag` (3), `diag_every_n`, `constraints`
-(`{fix_translation: [i], fix_bond: [[i, j]], fix_angle: [[i, j, k]], fix_dihedral: [[i, j, k, l]]}`),
-`constraints_tol` (1e-5), `max_steps` (150). Convergence follows Gaussian's criteria: `ediff` (eV), `fmax` /
-`frms` (eV/Å, RMS over all 3N components), `dmax` / `drms` (Å).
+**opt**: `optimizer` (`sella` | `geometric`), `ts` (false), `calc_hess` (= `ts`), `trajectory`, `outputfile`,
+`constraints` (`{fix_translation: [i], fix_bond: [[i, j]], fix_angle: [[i, j, k]], fix_dihedral: [[i, j, k, l]]}`),
+`max_steps` (150) and Gaussian's convergence criteria `ediff` (eV), `fmax` / `frms` (eV/Å, RMS over all 3N
+components), `dmax` / `drms` (Å) mean the same for both optimizers.
+Sella (default): `internal` (true), `delta0` (0.1), `eta` (1e-4), `gamma` (0.1), `nsteps_per_diag` (3),
+`diag_every_n`, `constraints_tol` (1e-5).
+geomeTRIC (pyscf's optimizer, `pip install -e .[geometric]`): `coordsys` (`tric` | `dlc` | `hdlc` | `prim` |
+`cart`), `convergence_set` (GAU; GAU_TIGHT, GAU_LOOSE, TURBOMOLE, ...), `hessian` (geomeTRIC's never | first |
+each | last | first+last, used when `calc_hess` is false; with `calc_hess` the driver's exact Hessian is written
+to `<prefix>_hessian.txt` and read by geomeTRIC), `prefix` (`<stem>_geometric`: geomeTRIC's `.log`, `_optim.xyz`
+and `.tmp` directory), and geomeTRIC's own `trust`, `tmax`, `tmin`, `enforce`, `epsilon`, `reset`, `qccnv`,
+`molcnv`, `subfrctor`, `convergence_cmax` pass through. Constraints need `tric`, `dlc` or `hdlc`. The driver's
+energies and gradients enter geomeTRIC through a custom engine; the trajectory and output files are the same.
 
 **freq**: `temperature` (298.15 K), `pressure` (101325 Pa), `vibfile`, `save_hess` (false), `symm_geom_tol`
 (Å, pyscf symmetry detection tolerance), `qrrho` (true), `alpha` (4), `omega0` (100 cm⁻¹), `Bav` (1e-44 kg m²,
@@ -338,8 +347,8 @@ The `byteqc`-marked tests run when `QC_LAUNCHER_BYTEQC_PYTHON` names that interp
 ```
 examples/
   1-single_point/   1-basic, 2-dft-3c, 3-df, 4-pcm, 5-smd, 6-soscf, 10-cuest (pyscf); 7-tblite, 8-xtb-solv, 9-anneal
-  2-geometry/       1-optimization, 2-frequency, 3-constraints (pyscf)
-  3-transition_state/   1-optts, 2-irc (tblite, Diels-Alder TS)
+  2-geometry/       1-optimization, 2-frequency, 3-constraints (pyscf), 4-geometric (tblite, geomeTRIC)
+  3-transition_state/   1-optts, 2-irc (tblite, Diels-Alder TS), 3-optts_geometric (geomeTRIC)
   4-nudged_elastic_band/   1-neb, 2-ci-neb, 3-autoneb (UMA)
   5-growing_string/ 1-gsm (tblite), 2-pyscf
   6-dynamics/       1-nve, 2-langevin, 3-nvt, 4-npt (tblite)
@@ -358,6 +367,6 @@ python -m pytest -q -m "not slow and not gpu"
 ruff check src tests && ruff format --check src tests
 ```
 
-Integration tests are marked `pyscf`, `gpu`, `tblite`, `mace`, `uma`, `sella`, `pygsm`, `pysisyphus` and
-`slow`, and skip automatically when the package (or the model file, via `QC_LAUNCHER_MACE_MODEL` /
+Integration tests are marked `pyscf`, `gpu`, `tblite`, `mace`, `uma`, `sella`, `geometric`, `pygsm`, `pysisyphus`
+and `slow`, and skip automatically when the package (or the model file, via `QC_LAUNCHER_MACE_MODEL` /
 `QC_LAUNCHER_UMA_MODEL`) is missing. Run the suite once per environment that provides a backend.

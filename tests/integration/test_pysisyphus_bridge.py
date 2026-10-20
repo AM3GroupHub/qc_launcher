@@ -5,7 +5,7 @@ from ase.units import Bohr, Hartree
 pytestmark = [pytest.mark.pysisyphus, pytest.mark.tblite]
 
 
-def test_bridge_matches_driver(water):
+def test_bridge_matches_driver(in_tmp, water):  # pysisyphus creates qm_calcs/ in the working directory
     from qc_launcher.drivers.pysisyphus_calc import QCSisyphusCalc
     from qc_launcher.drivers.tblite_driver import TBLiteDriver
 
