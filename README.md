@@ -150,9 +150,25 @@ Hessians come from MACE's analytic `get_hessian`.
 
 | Key | Default | Notes |
 |---|---|---|
-| `model_path` | required | `atom_refs_path` defaults to `iso_atom_elem_refs.yaml` next to the model |
-| `task_name`, `device` | `omol`, auto | |
+| `model_path` | required | local checkpoint, e.g. `uma-s-1p2p1.pt` |
+| `atom_refs_path` | `iso_atom_elem_refs.yaml` next to the model, if present | reference lookup for legacy checkpoints; `null` disables it. An explicit path must exist and match the model's level of theory |
+| `task_name`, `device` | `omol`, auto | single-task checkpoints (`uma-s-1p2p1-ft-d4rev`: omol only, `uma-s-1p2p1-ft-r2scan`: omat only) select their task automatically |
+| `inference_settings` | `default` | preset from the installed FAIRChem version, or a mapping of `InferenceSettings` fields with an optional `preset` key; e.g. `{preset: batch, internal_graph_gen_version: 3}` for the nvalchemiops neighbour list (`pip install nvalchemi-toolkit-ops`) |
 | `finite_diff_step`, `batch_size` | `5e-3` Å, `128` | Hessians are batched central differences of the predicted forces |
+
+For `omol`, the model receives the structure's charge and spin multiplicity. Other tasks receive the required
+neutral charge and zero spin inputs; the structure's original charge and multiplicity are preserved. Explicit
+`task_name` values must be available in the checkpoint. The base UMA 1.2.1 and its D4rev/r²SCAN fine-tunes were
+checked with FAIRChem 2.22.0, including forces and finite-difference Hessians. These checkpoints predict isolated
+atoms directly, so the legacy reference sidecar is not used.
+
+Preset names and precision vary by FAIRChem version. In the newer
+[Nitro releases](https://facebookresearch.github.io/fairchem/uma-changelog/), `default` uses reduced precision,
+the former FP32 default is named `high-precision`, and `turbo` is removed. For finite-difference Hessians,
+`inference_settings: batch` provides an uncompiled FP32 option across these versions; `high-precision` is another
+option where available. The driver passes the requested preset through to the installed version and reports
+unsupported names. Use YAML booleans for boolean fields and lists for task collections, for example
+`predict_untrained_stress: [omol]`.
 
 ### Tasks
 
