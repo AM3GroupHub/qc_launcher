@@ -391,3 +391,9 @@ ruff check src tests && ruff format --check src tests
 Integration tests are marked `pyscf`, `gpu`, `tblite`, `mace`, `uma`, `sella`, `geometric`, `pygsm`, `pysisyphus`
 and `slow`, and skip automatically when the package (or the model file, via `QC_LAUNCHER_MACE_MODEL` /
 `QC_LAUNCHER_UMA_MODEL`) is missing. Run the suite once per environment that provides a backend.
+
+## License
+
+MIT License (see `LICENSE`). The optional backends keep their own licences and are imported only when a config
+asks for them: pyscf / gpu4pyscf and ByteQC are Apache-2.0, geomeTRIC BSD-3-Clause, pygsm,
+MACE and FAIRChem UMA MIT, ASE LGPL-2.1+, Sella and tblite LGPL-3.0, pysisyphus GPL-3.0.
