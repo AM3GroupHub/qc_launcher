@@ -105,3 +105,8 @@ qc_launch pysis config/run_optts_pysisyphus.yaml
 - `qc_launch gsm` raises a clear install hint if `[gsm]` is missing.
 - `qc_launch pysis` raises a clear install hint if `[pysisyphus]` is missing.
 - Any ASE-compatible driver in `qc_launcher` that provides energies and forces can be used for GSM.
+
+## License
+
+MIT License (see `LICENSE`). The optional backends keep their own licences and are imported only when a config
+asks for them.

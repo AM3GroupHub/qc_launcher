@@ -6,6 +6,7 @@ authors = [
     { name = "Yicheng Chen" }
 ]
 readme = "README.md"
+license = { text = "MIT" }  # table form: works with the older setuptools this branch may be built with
 requires-python = ">=3.9"
 dependencies = [
     "ase",
