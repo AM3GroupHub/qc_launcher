@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]  # PEP 639 licence metadata
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,6 +11,8 @@ authors = [
     { name = "Yicheng Chen" }
 ]
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 dependencies = [
     "ase",
