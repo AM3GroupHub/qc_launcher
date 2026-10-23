@@ -152,6 +152,7 @@ Hessians come from MACE's analytic `get_hessian`.
 |---|---|---|
 | `model_path` | required | `atom_refs_path` defaults to `iso_atom_elem_refs.yaml` next to the model |
 | `task_name`, `device` | `omol`, auto | |
+| `inference_settings` | `default` | fairchem preset name, or a mapping of `InferenceSettings` fields on top of a preset (`preset` key), e.g. `{internal_graph_gen_version: 3}` for the nvalchemiops neighbour list (`pip install nvalchemi-toolkit-ops`; about 30 % faster at 200 atoms, same forces) |
 | `finite_diff_step`, `batch_size` | `5e-3` Å, `128` | Hessians are batched central differences of the predicted forces |
 
 ### Tasks

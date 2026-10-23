@@ -14,10 +14,31 @@ from omegaconf import OmegaConf
 from .calc_driver import CalculatorDriver
 
 
+def resolve_inference_settings(setting):
+    """``inference_settings`` is a fairchem preset name ('default', 'batch', ...) or a mapping of
+    ``InferenceSettings`` fields applied on top of a preset (``preset`` key, default 'default'), for example
+    ``{internal_graph_gen_version: 3}`` to build neighbour lists with NVIDIA's nvalchemiops."""
+    if setting is None:
+        return "default"
+    if isinstance(setting, str):
+        return setting
+    import dataclasses
+
+    from fairchem.core.units.mlip_unit.api.inference import guess_inference_settings
+
+    fields = dict(setting)
+    preset = guess_inference_settings(str(fields.pop("preset", "default")))
+    unknown = set(fields) - {f.name for f in dataclasses.fields(preset)}
+    if unknown:
+        raise ValueError(f"Unknown inference_settings fields {sorted(unknown)}.")
+    return dataclasses.replace(preset, **fields)  # a copy: the shared preset objects stay untouched
+
+
 class UMADriver(CalculatorDriver):
     """Config keys (defaults): ``model_path`` (required), ``atom_refs_path`` (``iso_atom_elem_refs.yaml`` next
-    to the model, if present), ``task_name`` ('omol'), ``device`` (auto), ``finite_diff_step`` [Angstrom]
-    (5e-3), ``batch_size`` (128) for the finite-difference Hessian.
+    to the model, if present), ``task_name`` ('omol'), ``device`` (auto), ``inference_settings`` ('default';
+    a fairchem preset name or a mapping of InferenceSettings fields, see :func:`resolve_inference_settings`),
+    ``finite_diff_step`` [Angstrom] (5e-3), ``batch_size`` (128) for the finite-difference Hessian.
     """
 
     def build_calc(self) -> FAIRChemCalculator:
@@ -27,7 +48,10 @@ class UMADriver(CalculatorDriver):
         )
         atom_refs = OmegaConf.load(atom_refs_path) if os.path.exists(atom_refs_path) else None
         predictor = pretrained_mlip.load_predict_unit(
-            model_path, device=self.resolve_device(self.config), atom_refs=atom_refs
+            model_path,
+            inference_settings=resolve_inference_settings(self.config.get("inference_settings")),
+            device=self.resolve_device(self.config),
+            atom_refs=atom_refs,
         )
         return FAIRChemCalculator(predictor, task_name=self.config.get("task_name", "omol"))
 

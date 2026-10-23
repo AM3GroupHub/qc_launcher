@@ -5,6 +5,7 @@ driver:
   model_path: /home/admin/storage/models/uma/uma-s-1p2.pt
   device: cuda
   task_name: omol
+  # inference_settings: {internal_graph_gen_version: 3}  # nvalchemiops neighbour list (pip install nvalchemi-toolkit-ops)
 
 neb:
   num_images: 11

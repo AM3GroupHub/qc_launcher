@@ -1,3 +1,5 @@
+from importlib.util import find_spec
+
 import numpy as np
 import pytest
 from ase.units import Hartree
@@ -45,3 +47,25 @@ def test_short_optimization(water, uma_config, in_tmp):
     driver = make_driver(water, uma_config)
     load_task("opt")(driver, {"max_steps": 5}, "water")
     assert (in_tmp / "water_opt.xyz").exists()
+
+
+def test_inference_settings_resolution():
+    from fairchem.core.units.mlip_unit.api.inference import inference_settings_default
+
+    from qc_launcher.drivers.uma_driver import resolve_inference_settings
+
+    assert resolve_inference_settings(None) == "default"
+    assert resolve_inference_settings("batch") == "batch"
+    settings = resolve_inference_settings({"internal_graph_gen_version": 3})
+    assert settings.internal_graph_gen_version == 3
+    assert inference_settings_default().internal_graph_gen_version == 2  # the shared preset is not mutated
+    with pytest.raises(ValueError, match="Unknown inference_settings"):
+        resolve_inference_settings({"no_such_field": 1})
+
+
+@pytest.mark.skipif(find_spec("nvalchemiops") is None, reason="needs nvalchemi-toolkit-ops")
+def test_nvalchemiops_graph_matches_default(water, uma_config):
+    reference = make_driver(water, uma_config)
+    nvidia = make_driver(water, uma_config, inference_settings={"internal_graph_gen_version": 3})
+    assert nvidia.compute_energy() == pytest.approx(reference.compute_energy(), abs=1e-4)
+    np.testing.assert_allclose(nvidia.compute_forces(), reference.compute_forces(), atol=1e-3)
