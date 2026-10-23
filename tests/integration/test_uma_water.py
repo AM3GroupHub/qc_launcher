@@ -69,3 +69,15 @@ def test_nvalchemiops_graph_matches_default(water, uma_config):
     nvidia = make_driver(water, uma_config, inference_settings={"internal_graph_gen_version": 3})
     assert nvidia.compute_energy() == pytest.approx(reference.compute_energy(), abs=1e-4)
     np.testing.assert_allclose(nvidia.compute_forces(), reference.compute_forces(), atol=1e-3)
+
+
+def test_default_task_name_handles_single_task_checkpoints():
+    from types import SimpleNamespace
+
+    from qc_launcher.drivers.uma_driver import default_task_name
+
+    multi = SimpleNamespace(dataset_to_tasks={"omol": [], "omat": [], "oc20": []})
+    single = SimpleNamespace(dataset_to_tasks={"omat": []})
+    assert default_task_name(multi, {}) == "omol"
+    assert default_task_name(single, {}) == "omat"
+    assert default_task_name(single, {"task_name": "omol"}) == "omol"  # explicit values are passed through

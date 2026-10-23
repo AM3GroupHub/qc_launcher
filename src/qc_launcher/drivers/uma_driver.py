@@ -34,9 +34,20 @@ def resolve_inference_settings(setting):
     return dataclasses.replace(preset, **fields)  # a copy: the shared preset objects stay untouched
 
 
+def default_task_name(predictor, config: dict):
+    """``task_name`` from the config; otherwise 'omol' for multi-task checkpoints and the only task of single-task
+    ones (the fine-tuned ``uma-s-1p2p1-ft-d4rev`` has only omol, ``uma-s-1p2p1-ft-r2scan`` only omat)."""
+    task_name = config.get("task_name")
+    if task_name is not None:
+        return task_name
+    available = list(getattr(predictor, "dataset_to_tasks", {}) or {})
+    return available[0] if len(available) == 1 else "omol"
+
+
 class UMADriver(CalculatorDriver):
     """Config keys (defaults): ``model_path`` (required), ``atom_refs_path`` (``iso_atom_elem_refs.yaml`` next
-    to the model, if present), ``task_name`` ('omol'), ``device`` (auto), ``inference_settings`` ('default';
+    to the model, if present), ``task_name`` ('omol', or the only task of a single-task checkpoint), ``device``
+    (auto), ``inference_settings`` ('default';
     a fairchem preset name or a mapping of InferenceSettings fields, see :func:`resolve_inference_settings`),
     ``finite_diff_step`` [Angstrom] (5e-3), ``batch_size`` (128) for the finite-difference Hessian.
     """
@@ -53,7 +64,7 @@ class UMADriver(CalculatorDriver):
             device=self.resolve_device(self.config),
             atom_refs=atom_refs,
         )
-        return FAIRChemCalculator(predictor, task_name=self.config.get("task_name", "omol"))
+        return FAIRChemCalculator(predictor, task_name=default_task_name(predictor, self.config))
 
     def _compute_hessian_impl(self, atoms: Atoms | None) -> np.ndarray:
         """Central differences of the predicted forces, batched through the predictor; (3N, 3N) in eV/Ang^2."""
