@@ -25,7 +25,7 @@ MARKER_PACKAGES = {
 
 DEFAULT_MODEL_PATHS = {
     "mace": "/home/admin/storage/models/mace/mace-mh-1.model",
-    "uma": "/home/admin/storage/models/uma/uma-s-1p2.pt",
+    "uma": "/home/admin/storage/models/uma/uma-s-1p2p1.pt",
 }
 
 
